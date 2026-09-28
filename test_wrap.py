@@ -2502,7 +2502,7 @@ def t31_ready_env_scrub():
     """T31 就绪门信号 env 的洗刷面（🔴1 后果①）：
     `AGENTD_WRAP_INIT_OK`/`AGENTD_WRAP_RECV_ARMED` 装的是 wrap 给**本次会话**的两枚标记绝对路径
     （身份/信号类，与 AGENTD_RESIDENT/DISPATCH_PROFILE 同族），必须只来自写者自身、不得继承：
-    未进洗刷名单时它们被任务内每个孙进程继承 → 经 bash 工具 → `make` → `svc/svc.py` 带进被启动的
+    未进洗刷名单时它们被任务内每个孙进程继承 → 经 bash 工具 → `make` → `serviced/serviced.py` 带进被启动的
     服务，且嵌套 receiver 会拿外层任务的标记开门。
       a) 名单单点含两枚 + scrub_env 真洗掉（其余键保留）；
       d) 跳文件同源：三个调用方都 import 同一份名单（不另立副本）；
@@ -2527,7 +2527,7 @@ def t31_ready_env_scrub():
 
     # ---- d) 跳文件同源（三个调用方 import 同一份名单，不另立副本）----
     ws = os.path.normpath(os.path.join(HERE, ".."))
-    for rel in ("svc/svc.py", "agentd/runner.py",
+    for rel in ("serviced/serviced.py", "agentd/runner.py",
                 # 第三个调用方在 gitignored 的 w/ 整树里（`git ls-files w` = 0）→ 快照隔离跑时
                 # 不在场；在场（真工作区）则照断，不在场显式记一条跳过（不静默、不当失败）。
                 "w/ext/sessiond/proc.py"):
@@ -2990,7 +2990,7 @@ def t44_provider_injection():
 def t45_heartbeat_env_scrub():
     """T45 `DISPATCH_HEARTBEAT` 的洗刷面：心跳标记与 AGENTD_RESIDENT 同族
     （只应来自 spec.command 前缀，登记方 = assistant/heartbeat.sh），未进洗刷名单时它被心跳
-    会话内每个孙进程继承 → 经 bash 工具 → `make` → `svc/svc.py` 带进被启动的服务；若那是
+    会话内每个孙进程继承 → 经 bash 工具 → `make` → `serviced/serviced.py` 带进被启动的服务；若那是
     agentd，它 spawn 的每个任务都带上递归守卫豁免（守卫全网静默失效）。
       a) 名单单点含该枚 + scrub_env 真洗掉（其余键逐字保留，不过杀）；
       d) 心跳豁免不回归：按 spec.command 前缀形态（bash -c 'DISPATCH_HEARTBEAT=1 exec …'）
@@ -3112,7 +3112,7 @@ def t46_resident_prompt_delivery():
 
 # spec.command 的 env 前缀是身份标记进入会话的**唯一合法通道**（runner 先洗刷、再由 bash -c
 # 执行命令串 ⇒ 前缀注入发生在洗刷之后）。因此每一枚前缀键都必须在洗刷名单里：漏列 ⇒ 它从该
-# 会话的每个孙进程继承下去（bash 工具 → make → svc/svc.py → 被启动的服务），形态 =
+# 会话的每个孙进程继承下去（bash 工具 → make → serviced/serviced.py → 被启动的服务），形态 =
 # DISPATCH_HEARTBEAT 事故（若被启动的是 agentd，递归守卫全网静默失效）。本组 = **提交期钉桩**
 # （零运行时守卫：名单是枚名制、同前缀族里住着配置旋钮 ⇒ 不能按前缀洗，见 envscrub.py）。
 _CMD_PREFIX_SOURCES = (
