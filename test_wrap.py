@@ -7,6 +7,7 @@
 import glob
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -2501,12 +2502,9 @@ def t31_ready_env_scrub():
     """T31 就绪门信号 env 的洗刷面（🔴1 后果①）：
     `AGENTD_WRAP_INIT_OK`/`AGENTD_WRAP_RECV_ARMED` 装的是 wrap 给**本次会话**的两枚标记绝对路径
     （身份/信号类，与 AGENTD_RESIDENT/DISPATCH_PROFILE 同族），必须只来自写者自身、不得继承：
-    未进洗刷名单时它们被任务内每个孙进程继承，而 `svc/clean-make.py`（根 AGENTS.md 重启纪律②
-    的干净环境入口）先 `envscrub.scrub_env()` 再按 LEAK_PREFIXES 自检 → 洗不掉 → 在**任何子任务内
-    一律拒绝执行 make**（连只读 `svc.status` 也跑不了）。
+    未进洗刷名单时它们被任务内每个孙进程继承 → 经 bash 工具 → `make` → `svc/svc.py` 带进被启动的
+    服务，且嵌套 receiver 会拿外层任务的标记开门。
       a) 名单单点含两枚 + scrub_env 真洗掉（其余键保留）；
-      b) 子进程跑 `svc/clean-make.py svc.status --dry-run`（**不真跑 make**）在污染 env 下 rc=0；
-      c) 守卫本身未被削弱：名单外的 AGENT* 变量仍被拒（对照组）；
       d) 跳文件同源：三个调用方都 import 同一份名单（不另立副本）；
       e) 握手不受影响：spawn_pi() 在洗刷之后**显式**赋值两枚（源码顺序断言；端到端证据 = T30a）。"""
     import envscrub
@@ -2527,37 +2525,10 @@ def t31_ready_env_scrub():
     ok("T31a runner spawn 口径（strip_third_party=True）同样洗掉两枚",
        not any(k in envscrub.scrub_env(base=polluted, strip_third_party=True) for k in two))
 
-    # ---- b)+c) clean-make 自检（子进程，--dry-run：不真跑 make 的任何 target）----
-    cm = os.path.normpath(os.path.join(HERE, "..", "svc", "clean-make.py"))
-    ok("T31b svc/clean-make.py 在场", os.path.isfile(cm), cm)
-    env_dirty = dict(os.environ, **{two[0]: polluted[two[0]], two[1]: polluted[two[1]]})
-    proc = subprocess.run([sys.executable, cm, "svc.status", "--dry-run"],
-                          cwd=os.path.dirname(os.path.dirname(cm)), env=env_dirty,
-                          capture_output=True, text=True, timeout=120)
-    out = proc.stdout + proc.stderr
-    ok("T31b 污染 env 下 clean-make 不再拒绝（rc=0，后果① 已解）",
-       proc.returncode == 0, "rc=%s out=%s" % (proc.returncode, out[-300:]))
-    ok("T31b 自检输出两枚已洗掉（scrubbed keys present? []）",
-       "scrubbed keys present? []" in out, out[-300:])
-    ok("T31b --dry-run 未真跑 make（只打印命令）",
-       "refusing" not in out and "$ (clean env" in out, out[-300:])
-    # 对照组：守卫本身仍在岗——名单外的 AGENT* 变量依旧被拒（修复不是「把守卫关掉」）
-    env_guard = dict(os.environ, AGENTD_NOT_IN_SCRUB_LIST="1")
-    env_guard.pop(two[0], None)
-    env_guard.pop(two[1], None)
-    proc2 = subprocess.run([sys.executable, cm, "svc.status", "--dry-run"],
-                           cwd=os.path.dirname(os.path.dirname(cm)), env=env_guard,
-                           capture_output=True, text=True, timeout=120)
-    ok("T31c 对照组：名单外的 AGENT* 残留仍被拒（LEAK_PREFIXES 守卫未削弱）",
-       proc2.returncode != 0
-       and "refusing to run make with a polluted environment" in (proc2.stdout + proc2.stderr)
-       and "AGENTD_NOT_IN_SCRUB_LIST" in (proc2.stdout + proc2.stderr),
-       "rc=%s" % proc2.returncode)
-
     # ---- d) 跳文件同源（三个调用方 import 同一份名单，不另立副本）----
-    ws = os.path.dirname(os.path.dirname(cm))
-    for rel in ("svc/svc.py", "svc/clean-make.py", "agentd/runner.py",
-                # 第四个调用方在 gitignored 的 w/ 整树里（`git ls-files w` = 0）→ 快照隔离跑时
+    ws = os.path.normpath(os.path.join(HERE, ".."))
+    for rel in ("svc/svc.py", "agentd/runner.py",
+                # 第三个调用方在 gitignored 的 w/ 整树里（`git ls-files w` = 0）→ 快照隔离跑时
                 # 不在场；在场（真工作区）则照断，不在场显式记一条跳过（不静默、不当失败）。
                 "w/ext/sessiond/proc.py"):
         p = os.path.join(ws, rel)
@@ -3019,12 +2990,9 @@ def t44_provider_injection():
 def t45_heartbeat_env_scrub():
     """T45 `DISPATCH_HEARTBEAT` 的洗刷面：心跳标记与 AGENTD_RESIDENT 同族
     （只应来自 spec.command 前缀，登记方 = assistant/heartbeat.sh），未进洗刷名单时它被心跳
-    会话内每个孙进程继承，而 `svc/clean-make.py` 按 LEAK_PREFIXES（含 "DISPATCH"）自检 →
-    洗不掉 → 心跳会话内**任何** make 都跑不了（连只读 `svc.status`）；更重的后果是若被启动
-    的服务是 agentd，它 spawn 的每个任务都带上递归守卫豁免（守卫全网失效）。
+    会话内每个孙进程继承 → 经 bash 工具 → `make` → `svc/svc.py` 带进被启动的服务；若那是
+    agentd，它 spawn 的每个任务都带上递归守卫豁免（守卫全网静默失效）。
       a) 名单单点含该枚 + scrub_env 真洗掉（其余键逐字保留，不过杀）；
-      b) 污染 env 下 `clean-make.py svc.status --dry-run` rc=0 且自检报空（不真跑 make）；
-      c) 守卫本身未被削弱：名单外的 DISPATCH* 变量仍被拒（对照组）；
       d) 心跳豁免不回归：按 spec.command 前缀形态（bash -c 'DISPATCH_HEARTBEAT=1 exec …'）
          起进程 ⇒ pi 子进程 environ 里该标记仍在场（洗刷只断继承路径、不断显式声明路径）。"""
     import envscrub
@@ -3042,40 +3010,6 @@ def t45_heartbeat_env_scrub():
        sorted(scrubbed))
     ok("T45a runner spawn 口径（strip_third_party=True）同样洗掉该枚",
        key not in envscrub.scrub_env(base=polluted, strip_third_party=True))
-
-    # ---- b)+c) clean-make 自检（子进程，--dry-run：不真跑 make 的任何 target）----
-    cm = os.path.normpath(os.path.join(HERE, "..", "svc", "clean-make.py"))
-    ok("T45b svc/clean-make.py 在场", os.path.isfile(cm), cm)
-    ws = os.path.dirname(os.path.dirname(cm))
-    env_dirty = dict(os.environ, **{key: "1"})
-    proc = subprocess.run([sys.executable, cm, "svc.status", "--dry-run"],
-                          cwd=ws, env=env_dirty,
-                          capture_output=True, text=True, timeout=120)
-    out = proc.stdout + proc.stderr
-    ok("T45b 污染 env 下 clean-make 不再拒绝（rc=0，心跳会话内只读 target 可跑）",
-       proc.returncode == 0, "rc=%s out=%s" % (proc.returncode, out[-300:]))
-    ok("T45b 自检输出该枚已洗掉（scrubbed keys present? []）",
-       "scrubbed keys present? []" in out, out[-300:])
-    ok("T45b --dry-run 未真跑 make（只打印命令）",
-       "refusing" not in out and "$ (clean env" in out, out[-300:])
-    # 对照组：守卫仍在岗 —— 名单外的 DISPATCH* 依旧被拒（修复不是「把守卫关掉/收窄前缀」）
-    env_guard = dict(os.environ, DISPATCH_FOO="1")
-    env_guard.pop(key, None)
-    proc2 = subprocess.run([sys.executable, cm, "svc.status", "--dry-run"],
-                           cwd=ws, env=env_guard,
-                           capture_output=True, text=True, timeout=120)
-    out2 = proc2.stdout + proc2.stderr
-    ok("T45c 对照组：名单外的 DISPATCH* 残留仍被拒（LEAK_PREFIXES 守卫未削弱）",
-       proc2.returncode != 0
-       and "refusing to run make with a polluted environment" in out2
-       and "DISPATCH_FOO" in out2,
-       "rc=%s out=%s" % (proc2.returncode, out2[-300:]))
-    # 反证：洗刷名单里的同族枚（AGENTD_RESIDENT）同样不再被拒 ⇒ 不是只修一枚
-    proc3 = subprocess.run([sys.executable, cm, "svc.status", "--dry-run"],
-                           cwd=ws, env=dict(os.environ, AGENTD_RESIDENT="1"),
-                           capture_output=True, text=True, timeout=120)
-    ok("T45c 同族先例 AGENTD_RESIDENT 污染下亦 rc=0（口径一致，非单点特例）",
-       proc3.returncode == 0, "rc=%s" % proc3.returncode)
 
     # ---- d) 心跳豁免不回归：spec.command 前缀形态起进程 ⇒ pi 子进程 environ 仍带该标记 ----
     e = Env("t45hb")
@@ -3176,6 +3110,63 @@ def t46_resident_prompt_delivery():
        and "初始 prompt 已投递并被接受" not in err, err[-400:])
 
 
+# spec.command 的 env 前缀是身份标记进入会话的**唯一合法通道**（runner 先洗刷、再由 bash -c
+# 执行命令串 ⇒ 前缀注入发生在洗刷之后）。因此每一枚前缀键都必须在洗刷名单里：漏列 ⇒ 它从该
+# 会话的每个孙进程继承下去（bash 工具 → make → svc/svc.py → 被启动的服务），形态 =
+# DISPATCH_HEARTBEAT 事故（若被启动的是 agentd，递归守卫全网静默失效）。本组 = **提交期钉桩**
+# （零运行时守卫：名单是枚名制、同前缀族里住着配置旋钮 ⇒ 不能按前缀洗，见 envscrub.py）。
+_CMD_PREFIX_SOURCES = (
+    # (相对工作区根的 glob, 说明)。不在场 = 该源不在本快照内（w/ 整树 gitignored、pi-wrap
+    # 单独 checkout）⇒ 显式记一条跳过，不静默、不当失败。
+    ("bots/daemon/*/spec.json", "守护型/常驻 bot 的被追踪声明源"),
+    ("assistant/heartbeat.sh", "心跳任务的登记脚本（spec.command heredoc）"),
+    ("w/ext/sessiond/proc.py", "create_bot 的 spec.command 模板"),
+)
+# `KEY=VAL KEY=VAL … exec|python3|bash` 形态的前缀键（值可含引号/`$`/`{}`）
+_CMD_ENV_PREFIX_RE = re.compile(r"((?:\b[A-Z][A-Z0-9_]*=\S+[ \t]+)+)(?:exec|python3|bash)\b")
+
+
+def _cmd_prefix_keys(text):
+    """从命令/脚本文本里取全部 `KEY=VAL … exec` 形态的 env 前缀键名。"""
+    out = []
+    for m in _CMD_ENV_PREFIX_RE.finditer(text):
+        for kv in m.group(1).split():
+            out.append(kv.split("=", 1)[0])
+    return out
+
+
+def t47_spec_command_env_scrub():
+    """T47 `spec.command` env 前缀键 ⊆ 洗刷名单（提交期钉桩）：
+      a) 扫到的前缀键集合含已知四枚（防正则失配 ⇒ 扫到 0 枚的假绿）；
+      b) 逐枚断言 scrub_env 真洗掉（漏列 ⇒ 红在提交前，不红在事故里）。"""
+    import envscrub
+    ws = os.path.normpath(os.path.join(HERE, ".."))
+    found = {}
+    for pat, why in _CMD_PREFIX_SOURCES:
+        hits = sorted(glob.glob(os.path.join(ws, pat)))
+        if not hits:
+            ok("T47a %s 不在本快照内（%s）→ 跳过该源" % (pat, why), True)
+            continue
+        for h in hits:
+            with open(h, encoding="utf-8") as f:
+                for k in _cmd_prefix_keys(f.read()):
+                    found.setdefault(k, set()).add(os.path.relpath(h, ws))
+    if not found:
+        ok("T47 三个声明源均不在本快照内 → 本组跳过（无断言可跑）", True)
+        return
+    known = {"DISPATCH_PROFILE", "AGENTD_RESIDENT", "AGENTD_SESSION_NAME",
+             "DISPATCH_HEARTBEAT"}
+    ok("T47a 扫到已知四枚前缀键（正则未失配、非假绿）", known <= set(found),
+       sorted(found))
+    for k in sorted(found):
+        scrubbed = envscrub.scrub_env(base={k: "1", "PATH": "/usr/bin",
+                                            "SOME_UNRELATED": "keep-me"})
+        ok("T47b 前缀键 %s 被洗刷名单覆盖（源 %s）"
+           % (k, ",".join(sorted(found[k]))),
+           k not in scrubbed and scrubbed.get("SOME_UNRELATED") == "keep-me",
+           sorted(scrubbed))
+
+
 def main():
     global PASS, FAIL
     os.chmod(FAKEPI, 0o755)
@@ -3203,7 +3194,8 @@ def main():
                t42_resident_model_error_untouched,
                t43_heartbeat_prompt_anchor_lines,
                t44_provider_injection, t45_heartbeat_env_scrub,
-               t46_resident_prompt_delivery):
+               t46_resident_prompt_delivery,
+               t47_spec_command_env_scrub):
         print("---- %s" % fn.__name__)
         try:
             fn()
