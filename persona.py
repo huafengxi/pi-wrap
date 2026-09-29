@@ -27,9 +27,9 @@ CLI（扩展侧 `execFileSync` 调用；**stdout = 一个 JSON 对象**，告警
     fallback        bool   是否走了任务形态的缺省回落
     caps            [str]  展开后的有序能力名（已前置基线 / 去重保序）
     appendParts     [str]  **按注入序**的追加正文（逐能力 prompt.md 全文 + 末位知识清单块）
-    appendJoiner    str    pi 对多个 `--append-system-prompt` 的拼接符（= "\\n\\n"，
-                           pi 侧事实 = dist/core/agent-session.js 的 `join("\\n\\n")`；
-                           单点在此，注入层不硬编码）
+    appendJoiner    str    多段追加正文的拼接符（= pi 自身的语义：它对多段追加正文正是
+                           `join("\n\n")`，dist/core/agent-session.js；单点在此，
+                           注入层不硬编码）
     promptStats     [{cap,chars}]  逐能力正文字符数（自证/观测面）
     skillPaths      [str]  能力捆绑 skill 的绝对路径（按声明序，已核在场）
     extensionPaths  [str]  能力捆绑扩展的绝对 .ts 路径（**注入层兑现不了**：pi 无运行期装载
@@ -391,7 +391,7 @@ class Resolver:
                 if isinstance(m, str) and m.strip():
                     model = m.strip()
                 elif m is not None:
-                    self.emit("WARN: profile %r 的 model 字段非非空字符串，跳过 --model", name)
+                    self.emit("WARN: profile %r 的 model 字段非非空字符串，跳过 model 注入", name)
                 if "contextCompaction" in doc:
                     pol, err = cc_policy(doc.get("contextCompaction"))
                     if pol is None:
@@ -419,7 +419,7 @@ class Resolver:
                           "model=%s，caps=%s", name, model, ",".join(caps))
             else:
                 self.emit("WARN: 任务形态未设 DISPATCH_PROFILE → 回落 %r profile，但解析不到可用 model"
-                          "（清单缺失/损坏/无 model 字段/类型非法，成因见上方告警）⇒ 不注入 --model，"
+                          "（清单缺失/损坏/无 model 字段/类型非法，成因见上方告警）⇒ 不切模型，"
                           "落回 settings 默认（fail-soft：本路径影响所有任务 spawn，硬失败会自锁）", name)
         return caps, model, name, cc, fallback
 
