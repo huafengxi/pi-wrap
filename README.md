@@ -75,7 +75,6 @@ Injected by the supervisor (and scrubbed of inherited scheduler identity first):
 | `AGENTD_RESIDENT` | `1` = resident session (no completion convergence) |
 | `AGENTD_SESSION_NAME` | pinned session name for resident spawns |
 | `DISPATCH_PROFILE` | thin profile to assemble (ordered capability list) |
-| `DISPATCH_HEARTBEAT` | `1` = heartbeat-driven session: exempt from the recursion guard |
 | `AGENTD_WRAP_*` | per-run overrides: `PI_BIN`, `INIT_OK`, `RECV_ARMED`, `INIT_TIMEOUT`, `ARM_TIMEOUT`, `SETTLE_WINDOW`, `EXIT_GRACE` |
 | `AGENTD_DIR` | where the sibling `agentd` repo lives (default: `../agentd`) |
 
