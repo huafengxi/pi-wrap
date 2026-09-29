@@ -78,6 +78,16 @@ if FLAG_DIR:
                 "mode": MODE}) + "\n")
     except OSError:
         pass
+    # 人格输入 env 快照：人格装配不住 argv（注入层是 pi 扩展）⇒ wrap 的职责只剩
+    # 「把注入层 -e 进去 + 把它要读的输入 env 透传下去」，本快照钉后半句。
+    # 缺键记 None（与空串区分：空串 = 传了但值为空，None = 根本没传）。
+    try:
+        with open(os.path.join(FLAG_DIR, "persona_env"), "w") as f:
+            f.write(json.dumps({k: os.environ.get(k) for k in (
+                "DISPATCH_PROFILE", "AGENTD_RESIDENT", "AGENTD_SESSION_NAME",
+                "AGENT_ROOT", "AGENT_SELF", "AGENTD_CONTEXT_COMPACTION")}) + "\n")
+    except OSError:
+        pass
 
 
 def turn(rid, command, settle=True):

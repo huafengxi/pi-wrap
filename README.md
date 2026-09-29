@@ -82,27 +82,61 @@ Injected by the supervisor (and scrubbed of inherited scheduler identity first):
 
 ## Assembly face
 
-For a task/resident session the wrapper assembles the initial prompt from the
-workspace's persona assets: the profile named by `DISPATCH_PROFILE` (an ordered
-list of capabilities), each capability's `prompt.md`, and — when the profile
-declares `knowledge` — a rendered knowledge list resolved by name through
-`bots/kb_index.py`. Extensions are passed to `pi` with `-e`. An optional
-`prompt.md` in the participant directory is the initial nudge for a blank new
-generation (absent ⇒ bare start, which is a supported path).
+For a task/resident session the persona comes from the workspace's persona assets:
+the profile named by `DISPATCH_PROFILE` (an ordered list of capabilities), each
+capability's `prompt.md`, the skills it bundles, and — when a capability declares
+`knowledge` — a rendered knowledge list resolved by name through `bots/kb_index.py`.
+An optional `prompt.md` in the participant directory is the initial nudge for a
+blank new generation (absent ⇒ bare start, which is a supported path).
 
 Assembly is **two layers**, and the merge semantics live in exactly one of them:
 
-- `persona.py` — the *resolution* layer: profile manifest → capabilities →
-  structured injection face (ordered prompt parts, skill paths, tool allow/deny
-  sets, model + derived provider, normalized compaction policy, warnings). Every
-  merge rule and every fail-soft degrade branch is here, and nowhere else. It is
-  also a CLI (`persona.py resolve --root … --form task|resident [--profile …]` →
-  one JSON object on stdout) so an in-session consumer can resolve the very same
-  structure without re-implementing it.
-- `pi-rpc-wrap.py` — the *emission* layer: a thin mapping from that structure onto
-  `pi` flags, one rule per flag semantic (`--append-system-prompt`/`--skill`/`-e`
-  accumulate; `-t`/`-xt` assign, so each appears at most once; `--provider`
-  precedes `--model`).
+- `persona.py` (this repo) — the *resolution* layer: profile manifest →
+  capabilities → structured injection face (ordered prompt parts, skill paths,
+  tool allow/deny sets, model + derived provider, normalized compaction policy,
+  warnings). Every merge rule and every fail-soft degrade branch is here, and
+  nowhere else. It is also a CLI (`persona.py resolve --root … --form
+  task|resident [--profile …]` → one JSON object on stdout) so an out-of-process
+  consumer resolves the very same structure instead of re-implementing it.
+- `pi-core/agent/extensions/profile-loader.ts` (main workspace repo) — the
+  *injection* layer: a pi extension that calls that CLI once per session and maps
+  the structure onto pi's in-session API — system-prompt append
+  (`before_agent_start`), skill paths (`resources_discover`), active tool set
+  (`setActiveTools`), model (`setModel`), compaction policy (env + loading the
+  `context-compaction` unit). It is auto-discovered from `~/.pi/agent/extensions/`,
+  so a human can start a persona session with just `pi --persona <profile>`.
+
+**The wrapper therefore puts no persona data in argv any more** — no
+`--append-system-prompt`, no `--skill`, no `-t`/`-xt`, no `--model`/`--provider`.
+Its whole job for the persona face is two things (`_persona_ext_argv`):
+
+1. pass `-e <profile-loader.ts>`. The file is auto-discovered anyway; the explicit
+   `-e` **pins load order**, because pi loads CLI extensions before discovered ones
+   (`mergePaths(cliEnabledExtensions, enabledExtensions)` in
+   `dist/core/resource-loader.js`) and `before_agent_start` handlers run in load
+   order. Pinning it first keeps the persona text ahead of other global extensions'
+   appends (e.g. host-info's identity lines). pi de-duplicates by realpath, so the
+   same file arriving twice is loaded once — no duplicate flag registration.
+2. pass the two input env vars through untouched (`DISPATCH_PROFILE` = profile
+   name, `AGENTD_RESIDENT` = form), plus `AGENT_ROOT` so the extension can find
+   `persona.py`. The wrapper always *removes* an inherited
+   `AGENTD_CONTEXT_COMPACTION`: its writer is now the extension, and "no policy ⇒
+   env absent" is a hard semantic that must not depend on a clean caller
+   environment.
+
+Position note (a real difference from the retired argv form): `--append-system-prompt`
+landed in pi's dedicated slot, *before* `<project_context>` and the skills section,
+whereas `before_agent_start` only ever sees the finished prompt, so the persona is
+appended at its **end**. The appended bytes are identical (`appendJoiner` in
+`persona.py` is pi's own joiner for repeated append flags); only the position
+differs. Rebuilding the prompt to restore the old slot would need pi's private
+`buildSystemPrompt` (not in the package's public `exports`), so it is deliberately
+not done.
+
+Observability moved with it: the per-capability assembly log and the resolution
+warnings are now written by the extension to **pi's stderr** ⇒
+`run/agentd/<name>.stderr.log` (the same tail the diagnosis file quotes), not to
+the wrapper's own log. In-session evidence is the read-only `/persona` command.
 
 ## Sibling repo dependency
 
@@ -136,8 +170,8 @@ works when both repos sit in the same parent directory).
 
 | File | Role |
 |---|---|
-| `pi-rpc-wrap.py` | the wrapper: spawn, socket passthrough, readiness handshake, convergence, model-error gate, resident mode; argv emission for the assembled persona |
-| `persona.py` | persona assembly (resolution layer): profile/capabilities → structured injection face; also a CLI for in-session consumers |
+| `pi-rpc-wrap.py` | the wrapper: spawn, socket passthrough, readiness handshake, convergence, model-error gate, resident mode; loads the persona injection extension and passes its input env through |
+| `persona.py` | persona assembly (resolution layer): profile/capabilities → structured injection face; also a CLI for out-of-process consumers (the injection extension) |
 | `fakepi_rpc.py` | scriptable `pi --mode rpc` double for the tests |
-| `test_persona.py` | resolution-layer matrix (P1…P13: output contract, capability expansion, fallback, tool sets, bundles, model/provider, compaction policy, warnings, CLI) |
-| `test_wrap.py` | the verification matrix (T1…T47: argv/env, injection, handshake, convergence, exit-code semantics, cross-file pins) |
+| `test_persona.py` | resolution-layer matrix (P1…P16: output contract, capability expansion, fallback, tool sets, bundles, model/provider, compaction policy, knowledge tiers against the real `kb_index.py`, warnings, CLI) |
+| `test_wrap.py` | the verification matrix (T1…T48: argv/env, handshake, convergence, exit-code semantics, persona emission contract, cross-file pins) |

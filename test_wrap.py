@@ -3,6 +3,10 @@
 
 在 /tmp 临时树搭 agents/task/<id>/，以 fakepi_rpc.py 冒充 `pi --mode rpc`，
 逐场景断言。仅标准库。用法：python3 pi-wrap/test_wrap.py
+
+射程分工：**人格面的内容**（caps 展开序 / 回落 / 工具面并集 / knowledge 三档 / model 派生 /
+压缩策略归一 / 降级矩阵）不在这里断言 —— 那是解析层的输出契约，归 `test_persona.py`（P 系列）。
+本文件对人格面只断言 wrap 的两个动作（T48）：把注入层扩展 `-e` 进去、把输入 env 透传下去。
 """
 import glob
 import json
@@ -205,7 +209,15 @@ class Env:
 
     def read_argv(self):
         """fake 启动时落的 argv 快照（：resident argv 断言）。"""
-        p = os.path.join(self.flags, "argv")
+        return self._read_json("argv")
+
+    def read_persona_env(self):
+        """fake 启动时落的**人格输入 env** 快照（人格装配不住 argv ⇒ wrap 的职责只剩
+        「-e 注入层 + 透传输入 env」，本快照钉后半句；缺键 = None）。"""
+        return self._read_json("persona_env")
+
+    def _read_json(self, name):
+        p = os.path.join(self.flags, name)
         if not os.path.exists(p):
             return None
         try:
@@ -246,16 +258,11 @@ def t1_normal():
         ok("T1 fake 收到过 prompt",
            os.path.exists(os.path.join(e.flags, "prompt")))
         argv = e.read_argv()
-        ok("T1 任务形态 argv（-n 任务名 + -xt ask_user）",
-           argv is not None and "-xt" in argv
-           and argv[argv.index("-xt") + 1] == "ask_user"
-           and "-n" in argv
-           and argv[argv.index("-n") + 1] == "[task %s]" % e.name,
+        ok("T1 任务形态 argv（-n 任务名；人格面不在 argv —— 工具面/正文/模型全归注入层）",
+           argv is not None and "-n" in argv
+           and argv[argv.index("-n") + 1] == "[task %s]" % e.name
+           and not [f for f in PERSONA_FLAGS if f in argv],
            repr(argv))
-        parsed = _pi_parsed(argv)
-        ok("T1 pi parseArgs 生效集合 = {ask_user}（基线屏蔽，无 profile 零回归）",
-           parsed is not None and parsed["excludeTools"] == ["ask_user"],
-           repr(parsed))
         c.close()
     finally:
         e.cleanup([p])
@@ -527,36 +534,6 @@ def t12_sock_bind_failed():
         shutil.rmtree(base, ignore_errors=True)
 
 
-EXEC_TEXT = "# executor baseline\n\ntask persona\n"
-CAP_TEXT = "# reviewer persona\n\nbe strict\n"
-
-
-def _yml_val(x):
-    """极简 YAML 标量序列化（测试夹具只用「标量键 + 流式数组」两种形态，故 test_wrap 保持
-    仅标准库、不 import yaml）：字符串一律双引号（json.dumps 产出的是合法 YAML 双引号标量，
-    且能安全承载内嵌逗号/冒号）；None → null；bool → true/false；其余 str()。"""
-    if isinstance(x, str):
-        return json.dumps(x, ensure_ascii=False)
-    if x is None:
-        return "null"
-    if isinstance(x, bool):
-        return "true" if x else "false"
-    return str(x)
-
-
-def _yml(doc):
-    """dict → YAML 文本（嵌套 mapping 不支持：夹具不需要，用到即测试自身写错）。"""
-    lines = []
-    for k, v in doc.items():
-        if isinstance(v, dict):
-            raise AssertionError("测试夹具不用嵌套 mapping：%r" % k)
-        if isinstance(v, list):
-            lines.append("%s: [%s]" % (k, ", ".join(_yml_val(i) for i in v)))
-        else:
-            lines.append("%s: %s" % (k, _yml_val(v)))
-    return "\n".join(lines) + "\n"
-
-
 def _w(path, text="export default function () {}\n"):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
@@ -564,1691 +541,8 @@ def _w(path, text="export default function () {}\n"):
     return path
 
 
-def _mk_cap(root, name, prompt_text=CAP_TEXT, cap_yml=None):
-    """在临时树建一个原子能力 `bots/caps/<名>/{cap.yml,prompt.md}`（两层模型的复用单元）。
-      prompt_text=None ⇒ **bundle 能力**（无正文，只有捆绑声明，合法形态）；
-      cap_yml=None     ⇒ 不写 cap.yml（**纯正文能力**，装配器 WARN 后只注入正文）；
-      cap_yml=dict     ⇒ _yml() 序列化；cap_yml=str ⇒ 原样写（损坏 YAML / 顶层非 mapping 用例）。
-    返回 (能力目录, 正文文本 ∨ None)。"""
-    cdir = os.path.join(root, "bots", "caps", name)
-    os.makedirs(cdir, exist_ok=True)
-    if prompt_text is not None:
-        _w(os.path.join(cdir, "prompt.md"), prompt_text)
-    if cap_yml is not None:
-        _w(os.path.join(cdir, "cap.yml"),
-           cap_yml if isinstance(cap_yml, str) else _yml(cap_yml))
-    return cdir, prompt_text
-
-
-def _mk_manifest(root, name, caps=None, model=None, notes=None, extra=None,
-                 raw=None):
-    """在临时树建 profile 薄清单 `bots/profiles/<名>.json`（字段只有 name/summary/notes/
-    model/caps/contextCompaction；捆绑资产一律住能力 cap.yml，`contextCompaction` 是运行环境/
-    策略类字段、不是资产逃生口）。
-      caps 缺省 = [name]（同名单能力，最常见形态）；
-      extra = 追加字段（直挂禁字段与 contextCompaction 用例）；raw = 原样写（损坏 JSON /
-      顶层非对象用例）。
-    返回清单路径。"""
-    p = os.path.join(root, "bots", "profiles", name + ".json")
-    if raw is not None:
-        return _w(p, raw)
-    doc = {"name": name, "summary": "test profile %s" % name,
-           "caps": list(caps) if caps is not None else [name]}
-    if model is not None:
-        doc["model"] = model
-    if notes is not None:
-        doc["notes"] = list(notes)
-    if extra:
-        doc.update(extra)
-    return _w(p, json.dumps(doc, ensure_ascii=False))
-
-
-def _mk_persona(root, name, prompt_text=CAP_TEXT, cap_yml=None, **manifest):
-    """一站式：能力 `<name>` + 同名薄清单（caps:[name]）。返回 (能力目录, 正文文本)。"""
-    cdir, text = _mk_cap(root, name, prompt_text=prompt_text, cap_yml=cap_yml)
-    _mk_manifest(root, name, **manifest)
-    return cdir, text
-
-
-def _mk_executor(root, text=EXEC_TEXT):
-    """建任务形态基线能力 `executor`（装配器对任务形态恒前置它，故夹具要么建它、
-    要么显式接受「WARN 跳过」并只断言被测能力）。返回 (能力目录, 正文文本)。"""
-    return _mk_cap(root, "executor", prompt_text=text, cap_yml={"summary": "baseline"})
-
-
-def _mk_skill(root, name, with_skill_md=True):
-    """建共享库 skill `bots/skills/<名>/`（cap.yml 的 skills 按名捆绑；一级解析、不回落全局）。"""
-    sd = os.path.join(root, "bots", "skills", name)
-    os.makedirs(sd, exist_ok=True)
-    if with_skill_md:
-        _w(os.path.join(sd, "SKILL.md"), "# %s\n" % name)
-    return sd
-
-
-def _mk_ext_unit(root, name, form="index"):
-    """建共享库扩展单元 `bots/extensions/<名>/`（一律 .ts）。form：
-      index = 含 index.ts（恰一个 -e）；flat = 直属多个 .ts（按名排序各一个 -e）；
-      mixed = 直属 .ts + 非 .ts + dot 开头（非 .ts WARN 跳过、dot 静默跳过）；
-      nots  = 只有非 .ts（无可注入）；empty = 空目录。返回单元目录。"""
-    ed = os.path.join(root, "bots", "extensions", name)
-    os.makedirs(ed, exist_ok=True)
-    if form == "index":
-        _w(os.path.join(ed, "index.ts"))
-    elif form == "flat":
-        for fn in ("b.ts", "a.ts"):      # 故意逆序建，断言注入按名排序
-            _w(os.path.join(ed, fn))
-    elif form == "mixed":
-        _w(os.path.join(ed, "b.ts"))
-        _w(os.path.join(ed, "a.ts"))
-        _w(os.path.join(ed, "readme.md"), "# not ts\n")
-        _w(os.path.join(ed, ".hidden.ts"))
-    elif form == "nots":
-        _w(os.path.join(ed, "readme.md"), "# not ts\n")
-    return ed
-
-
-def _cap_argv_checks(name, argv, prompt_text, skills=(), model=None):
-    """能力注入的公共断言（--append-system-prompt / --skill / --model）。
-    skills = 期望的共享库 skill 名**按声明序**（能力化后不再按目录名排序：声明序即注入序，
-    作者可控）。模型只住 profile ⇒ model 断言的是薄清单的值。"""
-    prompts = _argv_flag_pairs(argv, "--append-system-prompt")
-    ok("%s argv 的 --append-system-prompt 恰一份且 = 能力 prompt.md 文本"
-       "（装配器不碰正文一个字节；基线能力在本夹具故意缺席 ⇒ 注入面只剩被测能力）" % name,
-       prompts == [prompt_text], repr(prompts)[:300])
-    got_skills = _argv_flag_pairs(argv, "--skill")
-    ok("%s argv 含每个捆绑 skill 的 --skill（bots/skills/ 一级解析，序 = 声明序）" % name,
-       [os.path.basename(x) for x in got_skills] == list(skills),
-       "got=%r want=%r" % (got_skills, list(skills)))
-    ok("%s --skill 一律是 bots/skills/ 下的绝对路径（不回落全局）" % name,
-       all(x.startswith(os.sep) and "bots/skills/" in x.replace(os.sep, "/")
-           for x in got_skills), repr(got_skills))
-    if model is not None:
-        ok("%s argv 含 --model %s（model 只住 profile）" % (name, model),
-           _argv_flag_pairs(argv, "--model") == [model], repr(argv))
-    else:
-        ok("%s argv 不含 --model（薄清单未声明 model）" % name,
-           argv is not None and "--model" not in argv, repr(argv))
-
-
-def t13_profile():
-    """T13 profile 在场（两层模型）：任务/常驻两形态 argv 均注入；`model` 住薄清单 → --model；
-    薄清单无 model → 不拼。被测能力是 caps 里唯一在场的能力（基线 executor 能力故意不建 ⇒
-    装配器 WARN 跳过，注入面只剩被测能力，断言不受基线干扰）。"""
-    # ① 任务形态 + 薄清单带 model + 能力捆绑两个 skill（声明序 = 注入序）
-    e = Env("t13a", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_skill(e.root, "b-skill")
-    _mk_skill(e.root, "a-skill")
-    _mk_persona(e.root, "review",
-                cap_yml={"summary": "reviewer", "skills": ["b-skill", "a-skill"]},
-                model="bailian/qwen3-test")
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        ok("T13a 任务形态收敛退出 0", rc == 0, "rc=%s" % rc)
-        _cap_argv_checks("T13a", argv, CAP_TEXT, skills=("b-skill", "a-skill"),
-                         model="bailian/qwen3-test")
-        ok("T13a 既有参数不变（-xt ask_user 仍在场、恰一个）",
-           _argv_flag_pairs(argv, "-xt") == ["ask_user"], repr(argv))
-    finally:
-        e.cleanup([p])
-    # ② 任务形态 + 薄清单无 model → 不拼 --model（两态覆盖）
-    e = Env("t13b", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_skill(e.root, "only-skill")
-    _mk_persona(e.root, "review", cap_yml={"skills": ["only-skill"]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        ok("T13b 退出 0", rc == 0, "rc=%s" % rc)
-        _cap_argv_checks("T13b", argv, CAP_TEXT, skills=("only-skill",), model=None)
-    finally:
-        e.cleanup([p])
-    # ③ resident 形态 + profile（与任务形态同款注入，但不前置基线能力）
-    e = Env("t13c", fake_mode="hang_settle",
-            extra_env={"AGENTD_RESIDENT": "1",
-                       "AGENTD_SESSION_NAME": "bot/zz-profile-t13",
-                       "DISPATCH_PROFILE": "review"})
-    _mk_skill(e.root, "s1")
-    _mk_persona(e.root, "review", cap_yml={"skills": ["s1"]})
-    p = e.start_wrap()
-    try:
-        ok("T13c sock 就位", e.wait_sock())
-        e.wait_argv()        # resident 不收敛：事件驱动等 argv 快照（旧 sleep(1.5)）
-        argv = e.read_argv()
-        _cap_argv_checks("T13c-resident", argv, CAP_TEXT, skills=("s1",), model=None)
-        ok("T13c resident 无基线 -xt（形态基线为空 ∧ 能力未声明排除）",
-           _argv_flag_pairs(argv, "-xt") == [], repr(argv))
-        ok("T13c 无诊断", e.read_diag() is None)
-    finally:
-        e.cleanup([p])
-
-
-def t14_profile_missing():
-    """T14 profile 薄清单不存在：WARN 跳过 + **任务形态仍前置基线能力**（装配器硬规则，
-    防漏列）⇒ 不再等价裸启动；无诊断、退出 0。"""
-    e = Env("t14", extra_env={"DISPATCH_PROFILE": "ghost"})
-    _mk_executor(e.root)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        ok("T14 正常收敛退出 0（不硬失败）", rc == 0, "rc=%s" % rc)
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T14 stderr 告警在场（点名 profile 不存在）",
-           "ghost" in err and "不存在" in err, err[-400:])
-        argv = e.read_argv()
-        prompts = _argv_flag_pairs(argv, "--append-system-prompt")
-        ok("T14 任务形态仍注入基线能力（executor 正文恰一份）",
-           prompts == [EXEC_TEXT], repr(prompts)[:300])
-        ok("T14 argv 无 --skill/--model",
-           argv is not None and "--skill" not in argv and "--model" not in argv,
-           repr(argv))
-        ok("T14 无诊断", e.read_diag() is None)
-    finally:
-        e.cleanup([p])
-    # ② resident 形态 + 薄清单缺失 = 真裸启动（不前置基线能力）
-    e = Env("t14b", fake_mode="hang_settle",
-            extra_env={"AGENTD_RESIDENT": "1",
-                       "AGENTD_SESSION_NAME": "bot/zz-ghost-t14",
-                       "DISPATCH_PROFILE": "ghost"})
-    _mk_executor(e.root)
-    p = e.start_wrap()
-    try:
-        ok("T14b sock 就位", e.wait_sock())
-        e.wait_argv()
-        argv = e.read_argv()
-        ok("T14b resident 薄清单缺失 → 裸启动（无任何人格注入、无 -xt）",
-           _argv_flag_pairs(argv, "--append-system-prompt") == []
-           and _argv_flag_pairs(argv, "-xt") == [], repr(argv))
-    finally:
-        e.cleanup([p])
-
-
-def t15_profile_unset():
-    """T15 未设 DISPATCH_PROFILE（两形态分档）：**任务形态仍注入基线能力**（装配器硬规则
-    承担，不再靠 core.ts 拼串）；**resident 形态 argv 逐字不变**（零回归出口移到这一档）——
-    即使薄清单与能力资产在场也绝不注入。
-    注：本夹具不建 `executor` **profile 清单**（只建同名能力）⇒ 任务形态的缺省回落走
-    fail-soft 分支（WARN + 不注入 --model），断言与回落接入前逐字一致；回落正面四态 = T36。"""
-    # ① 任务形态：只注入 executor 基线能力，其余资产在场也不注入
-    e = Env("t15a")
-    _mk_executor(e.root)
-    _mk_skill(e.root, "s1")
-    _mk_persona(e.root, "review", cap_yml={"skills": ["s1"]},
-                model="bailian/qwen3-test")
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        ok("T15a 收敛退出 0", rc == 0, "rc=%s" % rc)
-        ok("T15a 任务形态注入基线能力且只有它（review 资产在场也不注入）",
-           _argv_flag_pairs(argv, "--append-system-prompt") == [EXEC_TEXT]
-           and _argv_flag_pairs(argv, "--skill") == []
-           and "--model" not in (argv or []), repr(argv)[:300])
-        ok("T15a 基线 -xt ask_user 仍在场",
-           _argv_flag_pairs(argv, "-xt") == ["ask_user"], repr(argv))
-    finally:
-        e.cleanup([p])
-    # ② resident 形态：argv 逐字不变（零回归出口）
-    e = Env("t15b", fake_mode="hang_settle",
-            extra_env={"AGENTD_RESIDENT": "1",
-                       "AGENTD_SESSION_NAME": "bot/zz-unset-t15"})
-    _mk_executor(e.root)
-    _mk_persona(e.root, "review", cap_yml={"skills": ["s1"]},
-                model="bailian/qwen3-test")
-    _mk_skill(e.root, "s1")
-    p = e.start_wrap()
-    try:
-        ok("T15b sock 就位", e.wait_sock())
-        e.wait_argv()
-        argv = e.read_argv()
-        ok("T15b resident 未设 env → 无任何人格注入（现状逐字不变）",
-           _argv_flag_pairs(argv, "--append-system-prompt") == []
-           and _argv_flag_pairs(argv, "--skill") == []
-           and _argv_flag_pairs(argv, "-xt") == []
-           and "--model" not in (argv or []), repr(argv))
-    finally:
-        e.cleanup([p])
-
-
-def _argv_flag_pairs(argv, flag):
-    """收集 argv 中所有 <flag, 值> 对（多 -xt/-e 叠加断言用）。"""
-    out = []
-    if argv:
-        for i, a in enumerate(argv):
-            if a == flag and i + 1 < len(argv):
-                out.append(argv[i + 1])
-    return out
-
-
-def _pi_parsed(argv):
-    """pi CLI 生效集合级断言基建：用 node 调 pi 的 parseArgs 解析 wrap 产出 argv（去掉首个
-    元素 = 可执行名），返回 {excludeTools, tools}。argv 级断言拦不住 pi 实际语义问题（如重复
-    -xt 后者覆盖），故断言必须到解析后的生效集合层。node/args.js 不在场 → None（用例按断言
-    失败处理）。"""
-    if argv is None:
-        return None
-    cands = sorted(glob.glob(os.path.expanduser(
-        "~/.nvm/versions/node/*/lib/node_modules/@earendil-works/"
-        "pi-coding-agent/dist/cli/args.js")))
-    if not cands:
-        return None
-    script = ("import(%s).then(m=>{const r=m.parseArgs(%s);"
-              "process.stdout.write(JSON.stringify({"
-              "excludeTools:r.excludeTools||[],tools:r.tools||[]}))})"
-              % (json.dumps(cands[-1]), json.dumps(argv[1:])))
-    try:
-        out = subprocess.run(["node", "-e", script], capture_output=True,
-                             text=True, timeout=30)
-        if out.returncode != 0:
-            return None
-        return json.loads(out.stdout)
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return None
-
-
-def t16_tools_whitelist():
-    """T16 工具面白名单：cap.yml 的 tools → -t 逗号连接；清单 = review 试点的只读面；
-    任务形态基线 -xt ask_user 不变（白名单路径下排除集仍以单个 -xt 前置）。"""
-    e = Env("t16", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_persona(e.root, "review",
-                cap_yml={"tools": ["read", "grep", "find", "ls"]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        ok("T16 收敛退出 0", rc == 0, "rc=%s" % rc)
-        ok("T16 argv 含 -t 只读白名单（逗号连接、恰一个）",
-           _argv_flag_pairs(argv, "-t") == ["read,grep,find,ls"], repr(argv))
-        ok("T16 既有 -xt ask_user 不变（基线屏蔽保留、恰一个）",
-           _argv_flag_pairs(argv, "-xt") == ["ask_user"], repr(argv))
-        parsed = _pi_parsed(argv)
-        ok("T16 pi parseArgs 生效：白名单 tools 与基线 excludeTools 均生效",
-           parsed is not None
-           and parsed["tools"] == ["read", "grep", "find", "ls"]
-           and parsed["excludeTools"] == ["ask_user"], repr(parsed))
-    finally:
-        e.cleanup([p])
-
-
-def t17_tools_blacklist():
-    """T17 工具面黑名单：cap.yml 的 excludeTools 与形态基线 ask_user **并集**为单个 -xt——
-    pi 的 -xt 是赋值（重复出现后者覆盖前者），拆成两个 -xt 会解除任务形态对 ask_user 的屏蔽。
-    断言到 pi parseArgs 生效集合级（含 ask_user ∧ 黑名单元素）。"""
-    e = Env("t17", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_persona(e.root, "review",
-                cap_yml={"excludeTools": ["web_search", "bash"]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        ok("T17 收敛退出 0", rc == 0, "rc=%s" % rc)
-        ok("T17 argv 单个 -xt = 基线 ∪ 能力黑名单（基线项在前）",
-           _argv_flag_pairs(argv, "-xt") == ["ask_user,web_search,bash"], repr(argv))
-        ok("T17 argv 无 -t", argv is not None and "-t" not in argv, repr(argv))
-        parsed = _pi_parsed(argv)
-        ok("T17 pi parseArgs 生效集合含 ask_user 与黑名单元素",
-           parsed is not None
-           and set(parsed["excludeTools"])
-           == {"ask_user", "web_search", "bash"}, repr(parsed))
-    finally:
-        e.cleanup([p])
-
-
-def t18_tools_edge():
-    """T18 工具面边界：① 同一能力同时声明 tools 与 excludeTools ⇒ **两面均生效**（并集语义；
-    旧「互斥、白名单优先」已退休），被排除掉的白名单项 = WARN 不阻断；② 空数组/缺省 = 不拼
-    （未声明者不参与合并）；③ 非字符串元素 WARN 跳过；④ 全非法元素 → 不拼 -t。"""
-    # ① 并集语义：-t 与 -xt 并存，白名单里被排除的项 WARN
-    e = Env("t18a", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_persona(e.root, "review",
-                cap_yml={"tools": ["read", "bash"], "excludeTools": ["bash"]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T18a 收敛退出 0", rc == 0, "rc=%s" % rc)
-        ok("T18a -t 与 -xt 并存（并集语义，不再互斥）",
-           _argv_flag_pairs(argv, "-t") == ["read,bash"]
-           and _argv_flag_pairs(argv, "-xt") == ["ask_user,bash"], repr(argv))
-        parsed = _pi_parsed(argv)
-        ok("T18a pi parseArgs 生效集合：bash 最终被排除（excludeTools 在 tools 之后生效）",
-           parsed is not None and parsed["tools"] == ["read", "bash"]
-           and set(parsed["excludeTools"]) == {"ask_user", "bash"}, repr(parsed))
-        ok("T18a 被排除的白名单项 WARN 在场（可见即可、不阻断）",
-           "被排除集命中" in err and "bash" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-    # ② 空数组 = 缺省：工具面相关 argv 逐字不变（只剩既有 -xt ask_user）
-    e = Env("t18b", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_persona(e.root, "review", cap_yml={"tools": [], "excludeTools": []})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        ok("T18b 空数组 = 未声明（无 -t，-xt 仅 ask_user）",
-           rc == 0 and argv is not None and "-t" not in argv
-           and _argv_flag_pairs(argv, "-xt") == ["ask_user"], repr(argv))
-    finally:
-        e.cleanup([p])
-    # ③ 非字符串元素跳过，其余生效 + 告警
-    e = Env("t18c", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_persona(e.root, "review",
-                cap_yml={"excludeTools": ["bash", 42, None, "  "]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T18c 非法元素跳过后剩余黑名单生效（单个合并 -xt）",
-           rc == 0 and _argv_flag_pairs(argv, "-xt")
-           == ["ask_user,bash"], repr(argv))
-        ok("T18c 非法元素告警在场", "非字符串" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-    # ④ 全非法元素 → 过滤后为空 = 未声明不拼
-    e = Env("t18d", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_persona(e.root, "review", cap_yml={"tools": [42, None]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        ok("T18d 全非法元素 → 不拼 -t",
-           rc == 0 and argv is not None and "-t" not in argv, repr(argv))
-    finally:
-        e.cleanup([p])
-
-
-def t19_profile_extensions():
-    """T19 能力捆绑扩展（共享库 `bots/extensions/<名>/`，一律 .ts）：index.ts 形态 → 恰一个 -e；
-    flat 形态 → 直属每个 .ts 按名排序各一个 -e；非 .ts → WARN 跳过、dot 开头静默跳过；
-    与协议层 -e 并存；多单元按声明序。"""
-    e = Env("t19", extra_env={"DISPATCH_PROFILE": "review"})
-    ed_idx = _mk_ext_unit(e.root, "unit-idx", "index")
-    ed_flat = _mk_ext_unit(e.root, "unit-flat", "flat")
-    ed_mix = _mk_ext_unit(e.root, "unit-mixed", "mixed")
-    _mk_persona(e.root, "review",
-                cap_yml={"extensions": ["unit-idx", "unit-flat", "unit-mixed"]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T19 收敛退出 0", rc == 0, "rc=%s" % rc)
-        es = _argv_flag_pairs(argv, "-e")
-        got = [x for x in es if "bots/extensions" in x.replace(os.sep, "/")]
-        want = [os.path.join(ed_idx, "index.ts"),
-                os.path.join(ed_flat, "a.ts"), os.path.join(ed_flat, "b.ts"),
-                os.path.join(ed_mix, "a.ts"), os.path.join(ed_mix, "b.ts")]
-        ok("T19 扩展 -e 序确定（单元按声明序；flat 单元内按名排序）",
-           got == want, "got=%r want=%r" % (got, want))
-        ok("T19 非 .ts / dot 开头条目未注入",
-           not any("readme.md" in x or ".hidden.ts" in x for x in es), repr(es))
-        ok("T19 跳过告警在场", "非 .ts" in err, err[-500:])
-        ok("T19 协议层 -e 与既有 -xt ask_user 不受影响",
-           "ask_user" in ",".join(_argv_flag_pairs(argv, "-xt")), repr(argv))
-    finally:
-        e.cleanup([p])
-
-
-def t20_profile_extensions_empty():
-    """T20 扩展单元降级：① 空目录 / 只有非 .ts ⇒ 无该单元 -e + WARN；② 捆绑名不存在 ⇒ WARN
-    跳过；③ resident 未设 DISPATCH_PROFILE ⇒ 能力资产在场也绝不注入。"""
-    e = Env("t20a", extra_env={"DISPATCH_PROFILE": "review"})
-    ed_empty = _mk_ext_unit(e.root, "unit-empty", "empty")
-    ed_nots = _mk_ext_unit(e.root, "unit-nots", "nots")
-    _mk_persona(e.root, "review",
-                cap_yml={"extensions": ["unit-empty", "unit-nots", "unit-ghost"]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        es = _argv_flag_pairs(argv, "-e")
-        ok("T20a 空/无可注入 .ts/不存在的单元 → 无 capability 侧 -e",
-           rc == 0 and not any(x.startswith((ed_empty, ed_nots)) for x in es)
-           and not any("unit-ghost" in x for x in es), repr(argv))
-        ok("T20a 两类降级告警在场（无可注入 .ts / 单元不存在）",
-           "无可注入 .ts" in err and "不存在" in err, err[-500:])
-    finally:
-        e.cleanup([p])
-    # ② resident 未设 env：能力资产（扩展 + 工具面）在场也绝不注入
-    e = Env("t20b", fake_mode="hang_settle",
-            extra_env={"AGENTD_RESIDENT": "1",
-                       "AGENTD_SESSION_NAME": "bot/zz-noenv-t20"})
-    ed = _mk_ext_unit(e.root, "unit-idx", "index")
-    _mk_persona(e.root, "review",
-                cap_yml={"tools": ["read"], "extensions": ["unit-idx"]})
-    p = e.start_wrap()
-    try:
-        ok("T20b sock 就位", e.wait_sock())
-        e.wait_argv()
-        argv = e.read_argv()
-        ok("T20b resident 未设 env → extensions/tools 在场也绝不注入",
-           "-t" not in (argv or [])
-           and not any(x.startswith(ed) for x in _argv_flag_pairs(argv, "-e")),
-           repr(argv))
-    finally:
-        e.cleanup([p])
-
-
-def t21_xt_merge_edges():
-    """T21 -xt 合并边界：① 黑名单含 ask_user 本身 → 并集去重（任务形态基线在前）；
-    ② resident 形态无基线 → 黑名单独立单个 -xt（不含 ask_user）。两态均断言 pi parseArgs
-    生效集合。"""
-    e = Env("t21a", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_persona(e.root, "review",
-                cap_yml={"excludeTools": ["ask_user", "web_search"]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        ok("T21a 并集去重（单个 -xt，无重复 ask_user）",
-           rc == 0 and _argv_flag_pairs(argv, "-xt")
-           == ["ask_user,web_search"], repr(argv))
-        parsed = _pi_parsed(argv)
-        ok("T21a pi parseArgs 生效集合 = {ask_user, web_search}",
-           parsed is not None
-           and set(parsed["excludeTools"]) == {"ask_user", "web_search"},
-           repr(parsed))
-    finally:
-        e.cleanup([p])
-    e = Env("t21b", fake_mode="hang_settle",
-            extra_env={"AGENTD_RESIDENT": "1",
-                       "AGENTD_SESSION_NAME": "bot/zz-xt-t21",
-                       "DISPATCH_PROFILE": "review"})
-    _mk_persona(e.root, "review",
-                cap_yml={"excludeTools": ["web_search", "bash"]})
-    p = e.start_wrap()
-    try:
-        ok("T21b sock 就位", e.wait_sock())
-        e.wait_argv()
-        argv = e.read_argv()
-        ok("T21b resident 单个 -xt 无基线项（行为不变）",
-           _argv_flag_pairs(argv, "-xt") == ["web_search,bash"], repr(argv))
-        parsed = _pi_parsed(argv)
-        ok("T21b pi parseArgs 生效集合 = 黑名单（无 ask_user）",
-           parsed is not None
-           and set(parsed["excludeTools"]) == {"web_search", "bash"},
-           repr(parsed))
-    finally:
-        e.cleanup([p])
-
-
-def t22_tools_field_edges():
-    """T22 工具面字段边界：① 含内嵌逗号元素 → WARN 拒绝该元素（pi 按逗号拆工具名，防白名单/
-    黑名单被撑大）；② 字段非数组 → WARN 跳过、工具面零变化（基线 -xt 仍兜底在场）。"""
-    e = Env("t22a", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_persona(e.root, "review",
-                cap_yml={"excludeTools": ["read,bash", "grep"]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T22a 含逗号元素被拒绝，剩余黑名单与基线合并",
-           rc == 0 and _argv_flag_pairs(argv, "-xt")
-           == ["ask_user,grep"], repr(argv))
-        ok("T22a 逗号拒绝告警在场", "内嵌逗号" in err, err[-500:])
-    finally:
-        e.cleanup([p])
-    e = Env("t22b", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_persona(e.root, "review", cap_yml={"tools": ["a,b", "read"]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T22b 白名单含逗号元素被拒绝，剩余生效",
-           rc == 0 and _argv_flag_pairs(argv, "-t") == ["read"], repr(argv))
-        ok("T22b 逗号拒绝告警在场", "内嵌逗号" in err, err[-500:])
-    finally:
-        e.cleanup([p])
-    e = Env("t22c", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_persona(e.root, "review", cap_yml={"tools": "read"})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T22c 非数组字段跳过（无 -t，基线 -xt ask_user 兜底在场）",
-           rc == 0 and argv is not None and "-t" not in argv
-           and _argv_flag_pairs(argv, "-xt") == ["ask_user"], repr(argv))
-        ok("T22c 非数组告警在场", "非数组" in err, err[-500:])
-    finally:
-        e.cleanup([p])
-
-
-def t23_multi_cap_order():
-    """T23 多能力注入序（薄清单 caps 列表序 = 注入序）：多个 --append-system-prompt（追加语义）、
-    各能力的 skills/extensions 依次注入；任务形态基线单个 -xt ask_user 保留。"""
-    e = Env("t23", extra_env={"DISPATCH_PROFILE": "combo"})
-    _mk_skill(e.root, "s-base")
-    _mk_skill(e.root, "s-p1")
-    _mk_skill(e.root, "s-p2")
-    ed_a = _mk_ext_unit(e.root, "unit-a", "index")
-    ed_b = _mk_ext_unit(e.root, "unit-b", "index")
-    _mk_cap(e.root, "base", prompt_text="# base persona\n",
-            cap_yml={"skills": ["s-base"], "extensions": ["unit-a"]})
-    _mk_cap(e.root, "persona", prompt_text="# persona overlay\n",
-            cap_yml={"skills": ["s-p1", "s-p2"], "extensions": ["unit-b"]})
-    _mk_manifest(e.root, "combo", caps=["base", "persona"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        ok("T23 收敛退出 0", rc == 0, "rc=%s" % rc)
-        prompts = _argv_flag_pairs(argv, "--append-system-prompt")
-        ok("T23 多个 --append-system-prompt 顺序 = caps 列表序",
-           prompts == ["# base persona\n", "# persona overlay\n"], repr(prompts))
-        skills = [os.path.basename(x) for x in _argv_flag_pairs(argv, "--skill")]
-        ok("T23 skills 按 caps 序注入（能力内按声明序）",
-           skills == ["s-base", "s-p1", "s-p2"], repr(skills))
-        es = _argv_flag_pairs(argv, "-e")
-        got = [x for x in es if "bots/extensions" in x.replace(os.sep, "/")]
-        ok("T23 extensions 按 caps 序注入",
-           got == [os.path.join(ed_a, "index.ts"), os.path.join(ed_b, "index.ts")],
-           repr(got))
-        ok("T23 基线单个 -xt ask_user 保留",
-           _argv_flag_pairs(argv, "-xt") == ["ask_user"], repr(argv))
-    finally:
-        e.cleanup([p])
-
-
-def t24_cap_partial_missing():
-    """T24 caps 内单能力缺失：WARN 跳过该能力、其余照常注入，不硬失败不拖垮会话（无诊断）；
-    全部能力缺失 + 任务形态 ⇒ 只剩形态基线 -xt（基线能力也不在场时 = 等价裸启动）。"""
-    # ① ghost 在前：其余照常注入
-    e = Env("t24a", extra_env={"DISPATCH_PROFILE": "combo"})
-    _mk_skill(e.root, "s1")
-    _mk_cap(e.root, "review", cap_yml={"skills": ["s1"]})
-    _mk_manifest(e.root, "combo", caps=["ghost", "review"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        argv = e.read_argv()
-        ok("T24a 收敛退出 0（不硬失败）", rc == 0, "rc=%s" % rc)
-        ok("T24a 缺失能力告警在场", "ghost" in err and "不存在" in err, err[-400:])
-        _cap_argv_checks("T24a", argv, CAP_TEXT, skills=("s1",))
-        ok("T24a 无诊断", e.read_diag() is None)
-    finally:
-        e.cleanup([p])
-    # ② 全部能力缺失（含基线）= 等价裸启动（无任何人格参数，基线 -xt 兜底）
-    e = Env("t24b", extra_env={"DISPATCH_PROFILE": "combo"})
-    _mk_manifest(e.root, "combo", caps=["ghost1", "ghost2"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        ok("T24b 全能力缺失 → 等价裸启动（退出 0、无人格参数、基线 -xt 仍在）",
-           rc == 0
-           and _argv_flag_pairs(argv, "--append-system-prompt") == []
-           and _argv_flag_pairs(argv, "--skill") == []
-           and "--model" not in (argv or [])
-           and _argv_flag_pairs(argv, "-xt") == ["ask_user"], repr(argv))
-    finally:
-        e.cleanup([p])
-
-
-def t25_model_and_toolface_merge():
-    """T25 声明面归属与并集：① `model` **只住 profile**（薄清单的值生效为单个 --model；
-    能力 cap.yml 声明 model = 非法键 ⇒ WARN 忽略，旧「跨链后者覆盖」退休）；② 工具面跨能力
-    **并集**（两能力分别声明 tools 与 excludeTools ⇒ -t 与 -xt 同时在场，旧「后者覆盖」退休）。"""
-    # ① model 只住 profile
-    e = Env("t25a", extra_env={"DISPATCH_PROFILE": "who"})
-    _mk_cap(e.root, "base", prompt_text="# base\n",
-            cap_yml={"model": "bailian/cap-should-be-ignored"})
-    _mk_manifest(e.root, "who", caps=["base"], model="bailian/profile-model")
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T25a --model 恰一个且 = 薄清单的值（能力层声明被忽略）",
-           rc == 0 and _argv_flag_pairs(argv, "--model") == ["bailian/profile-model"],
-           repr(argv))
-        ok("T25a 能力层非法键 model 的 WARN 在场",
-           "非法键" in err and "model" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-    # ①' profile 未声明 model ⇒ 能力层声明也不生效（无 --model）
-    e = Env("t25a2", extra_env={"DISPATCH_PROFILE": "who"})
-    _mk_cap(e.root, "base", prompt_text="# base\n",
-            cap_yml={"model": "bailian/cap-only"})
-    _mk_manifest(e.root, "who", caps=["base"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        ok("T25a2 profile 无 model ⇒ 不拼 --model（能力层无此字段）",
-           rc == 0 and "--model" not in (argv or []), repr(argv))
-    finally:
-        e.cleanup([p])
-    # ② 工具面跨能力并集（白名单 ∪ 白名单、黑名单 ∪ 黑名单 ∪ 基线）
-    e = Env("t25b", extra_env={"DISPATCH_PROFILE": "combo"})
-    _mk_cap(e.root, "base", prompt_text="# base\n",
-            cap_yml={"tools": ["read", "grep"]})
-    _mk_cap(e.root, "persona", prompt_text="# persona\n",
-            cap_yml={"tools": ["grep", "ls"], "excludeTools": ["web_search"]})
-    _mk_manifest(e.root, "combo", caps=["base", "persona"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T25b 工具面并集：-t = 两能力白名单去重保序、-xt = 基线 ∪ 黑名单",
-           rc == 0 and _argv_flag_pairs(argv, "-t") == ["read,grep,ls"]
-           and _argv_flag_pairs(argv, "-xt") == ["ask_user,web_search"],
-           repr(argv))
-        parsed = _pi_parsed(argv)
-        ok("T25b pi parseArgs 生效集合 = 并集（排除在 whitelist 之后生效）",
-           parsed is not None and parsed["tools"] == ["read", "grep", "ls"]
-           and set(parsed["excludeTools"]) == {"ask_user", "web_search"},
-           repr(parsed))
-        ok("T25b 无「后者覆盖」类告警（并集语义不是冲突）",
-           "覆盖" not in err, err[-400:])
-    finally:
-        e.cleanup([p])
-
-
-def t26_single_value_defense():
-    """T26 单值文法防护（链式已退役）：① 空值/全空白 = 未设；② **含逗号 = 已退役的链式写法**
-    ⇒ WARN 文案点名成因、按未设处置；③ 非法名（`../evil`、前导 `.`）⇒ WARN 拒绝；
-    ④ caps 数组内重复能力名 ⇒ 去重保序 + WARN。任务形态四态均仍注入基线能力。"""
-    # ① 空值/全空白 = 未设（任务形态只剩基线能力）
-    e = Env("t26a", extra_env={"DISPATCH_PROFILE": "   "})
-    _mk_executor(e.root)
-    _mk_persona(e.root, "pb", prompt_text="# pb\n")
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        ok("T26a 全空白 = 未设 → 只注入基线能力",
-           rc == 0 and prompts == [EXEC_TEXT], repr(prompts)[:300])
-    finally:
-        e.cleanup([p])
-    # ② 含逗号 = 已退役链式写法：WARN 点名成因 + 按未设处置（不硬失败）
-    e = Env("t26b", extra_env={"DISPATCH_PROFILE": "executor,pb"})
-    _mk_executor(e.root)
-    _mk_persona(e.root, "pb", prompt_text="# pb\n")
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        ok("T26b 链式写法按未设处置（只剩基线能力，pb 不注入）",
-           rc == 0 and prompts == [EXEC_TEXT], repr(prompts)[:300])
-        ok("T26b WARN 文案点名「已退役的链式写法」（诊断可达）",
-           "含逗号" in err and "已退役的链式写法" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-    # ③ 非法名（穿越段）→ WARN 拒绝，任务形态仍前置基线能力
-    e = Env("t26c", extra_env={"DISPATCH_PROFILE": "../evil"})
-    _mk_executor(e.root)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        ok("T26c 非法名拒绝、基线能力照常注入",
-           rc == 0 and prompts == [EXEC_TEXT], repr(prompts)[:300])
-        ok("T26c 非法告警在场", "名字非法" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-    # ④ caps 内重复能力名 → 去重保序（正文恰注入一次）+ WARN
-    e = Env("t26d", extra_env={"DISPATCH_PROFILE": "combo"})
-    _mk_cap(e.root, "pa", prompt_text="# pa\n")
-    _mk_cap(e.root, "pb", prompt_text="# pb\n")
-    _mk_manifest(e.root, "combo", caps=["pa", "pb", "pa"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        ok("T26d caps 重复名去重保序（pa 恰一次、序不变）",
-           rc == 0 and prompts == ["# pa\n", "# pb\n"], repr(prompts))
-        ok("T26d 重复告警在场", "重复" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-
-
-def t27_resident_multi_cap():
-    """T27 resident 形态 + 多能力薄清单：装配两形态共用，resident 只按自身 spec.command 声明的
-    单值 DISPATCH_PROFILE 装载、**不前置基线能力**（任务形态的前置由装配器硬规则承担）；
-    无基线 -xt（行为不变）。"""
-    e = Env("t27", fake_mode="hang_settle",
-            extra_env={"AGENTD_RESIDENT": "1",
-                       "AGENTD_SESSION_NAME": "bot/zz-combo-t27",
-                       "DISPATCH_PROFILE": "combo"})
-    _mk_executor(e.root)          # 基线能力在场也不该被 resident 装载
-    _mk_cap(e.root, "base", prompt_text="# base persona\n")
-    _mk_cap(e.root, "persona", prompt_text="# persona overlay\n")
-    _mk_manifest(e.root, "combo", caps=["base", "persona"])
-    p = e.start_wrap()
-    try:
-        ok("T27 sock 就位", e.wait_sock())
-        e.wait_argv()
-        argv = e.read_argv()
-        prompts = _argv_flag_pairs(argv, "--append-system-prompt")
-        ok("T27 resident 多能力按 caps 序注入、**不前置 executor**",
-           prompts == ["# base persona\n", "# persona overlay\n"], repr(prompts))
-        ok("T27 resident 无基线 -xt（无 ask_user）",
-           _argv_flag_pairs(argv, "-xt") == [], repr(argv))
-        ok("T27 无诊断", e.read_diag() is None)
-    finally:
-        e.cleanup([p])
-
-
-KB_INDEX_SRC = os.path.join(HERE, os.pardir, "bots", "kb_index.py")
-
-
-def _mk_kb(root, dom_rel, docs, copy_tool=True):
-    """在临时树建知识域：<root>/<dom_rel>/ 下逐篇写 .md。
-    docs = [(文件名, when 或 None)]；when 非空 → 写 frontmatter（入册），None → 不写（未入册）。
-    copy_tool=True 把生产 bots/kb_index.py 拷进临时树（装配链路按文件路径导入，测的是真工具
-    而非 mock）。返回域绝对路径。"""
-    if copy_tool:
-        d = os.path.join(root, "bots")
-        os.makedirs(d, exist_ok=True)
-        shutil.copy(KB_INDEX_SRC, os.path.join(d, "kb_index.py"))
-    ddir = os.path.join(root, dom_rel)
-    os.makedirs(ddir, exist_ok=True)
-    for fn, when in docs:
-        with open(os.path.join(ddir, fn), "w") as f:
-            if when:
-                f.write('---\nwhen: "%s"\n---\n\n# %s\n\n正文\n' % (when, fn))
-            else:
-                f.write("# %s\n\n正文（未入册）\n" % fn)
-    return ddir
-
-
-def t28_knowledge():
-    """T28 knowledge 注入挂接：cap.yml 的 `knowledge` = **纯路径列表**（域级用途字段已退休）→
-    装配时调 bots/kb_index.py 聚合「知识清单」块，以一个额外 --append-system-prompt 追加在
-    **全部能力正文之后**；字段缺失 = 注入面逐字不变；跨能力并集去重保序；工具缺失/域不存在/
-    字段非法/对象形态一律 WARN 降级不拖垮会话。"""
-    # a) 正常注入：入册文档进清单（绝对路径）、未入册不进、域标题**不带描述**、顶在能力正文之后
-    e = Env("t28a", extra_env={"DISPATCH_PROFILE": "mod"})
-    ptext = "# moderator persona\n"
-    _mk_persona(e.root, "mod", prompt_text=ptext,
-                cap_yml={"knowledge": ["kb/dom"]})
-    ddir = _mk_kb(e.root, os.path.join("kb", "dom"),
-                  [("in.md", "要在做 X 时读"), ("out.md", None)])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        prompts = _argv_flag_pairs(argv, "--append-system-prompt")
-        ok("T28a 收敛退出 0", rc == 0, "rc=%s" % rc)
-        ok("T28a 能力正文仍是第一个 --append-system-prompt（清单块在其后）",
-           len(prompts) == 2 and prompts[0] == ptext, repr(prompts)[:300])
-        blk = prompts[1] if len(prompts) == 2 else ""
-        ok("T28a 知识清单块在场（标题 + 消费纪律）",
-           "知识清单" in blk and "禁止预加载" in blk, blk[:300])
-        ok("T28a 入册文档以绝对路径列出、文档级 when 照常、未入册不列",
-           os.path.join(ddir, "in.md") in blk and "要在做 X 时读" in blk
-           and os.path.join(ddir, "out.md") not in blk, blk[:400])
-        dom_heads = [l for l in blk.split("\n") if l.startswith("### 域 ")]
-        ok("T28a 域标题恰一个且不带描述（域级用途字段已退休）",
-           len(dom_heads) == 1 and "——" not in dom_heads[0], repr(dom_heads))
-        ok("T28a 无诊断", e.read_diag() is None)
-    finally:
-        e.cleanup([p])
-    # b) 字段缺失 = 注入面逐字不变（只有一个 --append-system-prompt）
-    e = Env("t28b", extra_env={"DISPATCH_PROFILE": "mod"})
-    _mk_persona(e.root, "mod", prompt_text=ptext, cap_yml={"summary": "m"})
-    _mk_kb(e.root, os.path.join("kb", "dom"), [("in.md", "w")])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T28b 无 knowledge 字段 → 注入面逐字不变（仅能力正文）",
-           rc == 0 and prompts == [ptext], repr(prompts)[:300])
-        ok("T28b 无 knowledge 日志/告警噪声", "knowledge" not in err, err[-300:])
-    finally:
-        e.cleanup([p])
-    # c) kb 工具缺失 → WARN 降级，不注入、不拖垮
-    e = Env("t28c", extra_env={"DISPATCH_PROFILE": "mod"})
-    _mk_persona(e.root, "mod", prompt_text=ptext,
-                cap_yml={"knowledge": ["kb/dom"]})
-    _mk_kb(e.root, os.path.join("kb", "dom"), [("in.md", "w")], copy_tool=False)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T28c kb_index 缺失 → 会话照常（仅能力正文）",
-           rc == 0 and prompts == [ptext], repr(prompts)[:300])
-        ok("T28c 降级告警在场", "kb 索引工具缺失" in err, err[-300:])
-        ok("T28c 无诊断", e.read_diag() is None)
-    finally:
-        e.cleanup([p])
-    # d) 域不存在 → 块内可见降级说明（不静默消失、不报错退出）
-    e = Env("t28d", extra_env={"DISPATCH_PROFILE": "mod"})
-    _mk_persona(e.root, "mod", prompt_text=ptext,
-                cap_yml={"knowledge": ["kb/ghost"]})
-    _mk_kb(e.root, os.path.join("kb", "dom"), [("in.md", "w")])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        blk = prompts[1] if len(prompts) == 2 else ""
-        ok("T28d 域不存在 → 块内可见降级说明",
-           rc == 0 and "目录不存在" in blk and "kb/ghost" in blk.replace(os.sep, "/"),
-           blk[:300])
-    finally:
-        e.cleanup([p])
-    # e) 字段非数组 / 对象形态（域级用途写法已退休）→ WARN 跳过，注入面不变
-    e = Env("t28e", extra_env={"DISPATCH_PROFILE": "mod"})
-    _mk_persona(e.root, "mod", prompt_text=ptext, cap_yml={"knowledge": "kb/dom"})
-    _mk_kb(e.root, os.path.join("kb", "dom"), [("in.md", "w")])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T28e knowledge 非数组 → WARN 跳过，注入面不变",
-           rc == 0 and prompts == [ptext], repr(prompts)[:300])
-        ok("T28e 非数组告警在场", "非数组" in err, err[-300:])
-    finally:
-        e.cleanup([p])
-    e = Env("t28e2", extra_env={"DISPATCH_PROFILE": "mod"})
-    _mk_persona(e.root, "mod", prompt_text=ptext,
-                cap_yml={"knowledge": [{"path": "kb/dom", "when": "旧形态"}]})
-    _mk_kb(e.root, os.path.join("kb", "dom"), [("in.md", "w")])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T28e2 对象形态（域级用途已退休）→ WARN 跳过，注入面不变",
-           rc == 0 and prompts == [ptext], repr(prompts)[:300])
-        ok("T28e2 退休告警在场", "已退休" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-    # f) 跨能力并集去重（同域只列一次）+ resident 形态同款注入
-    e = Env("t28f", fake_mode="hang_settle",
-            extra_env={"AGENTD_RESIDENT": "1",
-                       "AGENTD_SESSION_NAME": "bot/zz-kb-t28",
-                       "DISPATCH_PROFILE": "combo"})
-    _mk_cap(e.root, "base", prompt_text="# base\n",
-            cap_yml={"knowledge": ["kb/dom"]})
-    _mk_cap(e.root, "mod", prompt_text=ptext,
-            cap_yml={"knowledge": ["kb/dom", "kb/dom2"]})
-    _mk_manifest(e.root, "combo", caps=["base", "mod"])
-    _mk_kb(e.root, os.path.join("kb", "dom"), [("a.md", "wa")])
-    _mk_kb(e.root, os.path.join("kb", "dom2"), [("b.md", "wb")])
-    p = e.start_wrap()
-    try:
-        ok("T28f sock 就位", e.wait_sock())
-        e.wait_argv()
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        blk = prompts[-1] if len(prompts) == 3 else ""
-        ok("T28f resident：能力正文按 caps 序 + 末尾一个知识清单块",
-           prompts[:2] == ["# base\n", ptext] and "知识清单" in blk,
-           repr(prompts)[:300])
-        dom_heads = [l for l in blk.split("\n") if l.startswith("### 域 ")]
-        ok("T28f 跨能力同域去重（域标题 = 2 个不同域、同域只一次）且文档级 when 照常",
-           len(dom_heads) == 2 and len(set(dom_heads)) == 2
-           and "wa" in blk and "wb" in blk, repr(dom_heads) + blk[:400])
-        ok("T28f 无诊断", e.read_diag() is None)
-    finally:
-        e.cleanup([p])
-
-
-def t35_knowledge_tiers():
-    """T35 knowledge 按名解析 + 注入模式三档（lore 引用模型批）：
-    g) 三档各一节（library 逐册 when 恒递归两层 / desk journal 一行检索入口、账本与自建工作文件
-       不注入 / archive 一行检索入口）；
-    h) 名不可解析 ⇒ 一行降级说明进块（不静默消失）；
-    i) lore 根不在场 ⇒ 一条点名根因的 WARN，会话照常起（降级不拖垮）；
-    j) lore 名与 legacy 工作区路径混存 ⇒ 两档各一节 + 一行解析摘要日志；
-    k) 名含 `..` ⇒ 拒绝（WARN），注入面不变；
-    l) 名表缓存损坏 ⇒ 注入面零影响（缓存与注入链路隔离）。"""
-    ptext = "# domain persona\n"
-
-    def _lore_fixture(root, with_lore=True):
-        """建 lore 三面夹具（library 两层 + desk/journal + archive）；with_lore=False 只放工具。"""
-        _mk_kb(root, os.path.join("lore", "library", "dom", "facts"),
-               [("a.md", "册 A 何时读"), ("noWhen.md", None)],
-               copy_tool=True)                       # 顺带把生产 kb_index.py 拷进临时树
-        if not with_lore:
-            shutil.rmtree(os.path.join(root, "lore"), ignore_errors=True)
-            return {}
-        _mk_kb(root, os.path.join("lore", "library", "dom", "cases"),
-               [("c.md", "案例 C 何时读")], copy_tool=False)
-        _mk_kb(root, os.path.join("lore", "desk", "me", "journal"),
-               [("2026-09.md", None)], copy_tool=False)
-        _mk_kb(root, os.path.join("lore", "desk", "me"),
-               [("todo.md", None)], copy_tool=False)
-        _mk_kb(root, os.path.join("lore", "archive"),
-               [("incidents-x.md", None)], copy_tool=False)
-        lore = os.path.join(root, "lore")
-        return {"lib": os.path.join(lore, "library", "dom"),
-                "journal": os.path.join(lore, "desk", "me", "journal"),
-                "desk": os.path.join(lore, "desk", "me"),
-                "archive": os.path.join(lore, "archive")}
-
-    # g) 三档各一节
-    e = Env("t35g", extra_env={"DISPATCH_PROFILE": "mod"})
-    _mk_persona(e.root, "mod", prompt_text=ptext,
-                cap_yml={"knowledge": ["library/dom", "desk/me", "archive"]})
-    d = _lore_fixture(e.root)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        blk = prompts[1] if len(prompts) == 2 else ""
-        ok("T35g 收敛退出 0 且清单块顶在能力正文之后",
-           rc == 0 and len(prompts) == 2 and prompts[0] == ptext, repr(prompts)[:200])
-        ok("T35g library 档 = 逐册 when 表且恒递归（facts 与 cases 两层都进表）",
-           "### 知识库 `library/dom`" in blk
-           and os.path.join(d["lib"], "facts", "a.md") in blk
-           and os.path.join(d["lib"], "cases", "c.md") in blk
-           and "册 A 何时读" in blk and "案例 C 何时读" in blk, blk[:600])
-        ok("T35g library 档未入册册不列", "noWhen.md" not in blk, blk[:400])
-        ok("T35g desk 档 = journal 一行检索入口（含 grep 与 git log -S 两种检索）",
-           "### 书桌 `desk/me`" in blk and d["journal"] in blk
-           and "grep -rn <关键词>" in blk and "log -S<关键词>" in blk, blk[:600])
-        ok("T35g desk 档不逐册列 journal、账本与自建工作文件不注入清单",
-           "2026-09.md" not in blk and "**不注入清单**" in blk and "todo.md" in blk,
-           blk[:600])
-        ok("T35g archive 档 = 一行检索入口（不注入清单）",
-           "### 档案库 `archive`" in blk and d["archive"] in blk
-           and "incidents-x.md" not in blk and "incidents-" in blk, blk[:600])
-        ok("T35g 块头三句消费纪律在场",
-           all(x in blk for x in ("## 知识清单", "按需读取", "禁止预加载", "以权威为准")),
-           blk[:300])
-        ok("T35g 解析摘要日志一行（lore 档按层计数、legacy 0 项）",
-           "knowledge 名解析：lore 档 3 项（archive×1, desk×1, library×1），"
-           "legacy 工作区路径档 0 项" in err, err[-500:])
-        ok("T35g 无诊断", e.read_diag() is None)
-    finally:
-        e.cleanup([p])
-
-    # h) 名不可解析 ⇒ 一行降级说明进块
-    e = Env("t35h", extra_env={"DISPATCH_PROFILE": "mod"})
-    _mk_persona(e.root, "mod", prompt_text=ptext,
-                cap_yml={"knowledge": ["library/ghost", "desk/me"]})
-    d = _lore_fixture(e.root)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        blk = prompts[1] if len(prompts) == 2 else ""
-        ok("T35h 名不可解析 ⇒ 块内一行降级说明（不静默）+ 可解析面照常",
-           rc == 0 and "不可解析" in blk and "library/ghost" in blk
-           and "### 书桌 `desk/me`" in blk, blk[:400])
-    finally:
-        e.cleanup([p])
-
-    # i) lore 根不在场 ⇒ WARN 点名根因、会话照常
-    e = Env("t35i", extra_env={"DISPATCH_PROFILE": "mod"})
-    _mk_persona(e.root, "mod", prompt_text=ptext,
-                cap_yml={"knowledge": ["library/dom"]})
-    _lore_fixture(e.root, with_lore=False)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        blk = prompts[1] if len(prompts) == 2 else ""
-        ok("T35i lore 根不在场 ⇒ 会话照常起 + WARN 点名根因 + 块内降级说明",
-           rc == 0 and "lore 仓根不在场" in err and "不可解析" in blk
-           and e.read_diag() is None, err[-400:] + blk[:200])
-        ok("T35i 解析摘要标出 lore 根不在场", "不在场" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-
-    # j) lore 名与 legacy 工作区路径混存
-    e = Env("t35j", extra_env={"DISPATCH_PROFILE": "mod"})
-    _mk_persona(e.root, "mod", prompt_text=ptext,
-                cap_yml={"knowledge": ["library/dom", "kb/legacy"]})
-    d = _lore_fixture(e.root)
-    _mk_kb(e.root, os.path.join("kb", "legacy"), [("l.md", "legacy 册何时读")],
-           copy_tool=False)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        blk = prompts[1] if len(prompts) == 2 else ""
-        ok("T35j 两档混存 ⇒ 各一节且顺序照声明（lore 档在前）",
-           rc == 0 and "### 知识库 `library/dom`" in blk
-           and blk.index("### 知识库") < blk.index("### 域 ")
-           and "legacy 册何时读" in blk, blk[:500])
-        ok("T35j legacy 档一条聚合 WARN + 解析摘要计数",
-           "legacy 档" in err and "lore 档 1 项（library×1），legacy 工作区路径档 1 项" in err,
-           err[-500:])
-    finally:
-        e.cleanup([p])
-
-    # k) 名含 `..` ⇒ 拒绝
-    e = Env("t35k", extra_env={"DISPATCH_PROFILE": "mod"})
-    _mk_persona(e.root, "mod", prompt_text=ptext, cap_yml={"knowledge": ["../evil"]})
-    _lore_fixture(e.root)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        ok("T35k 名含 `..` ⇒ WARN 拒绝、注入面只有能力正文",
-           rc == 0 and prompts == [ptext] and "`..` 路径段" in err, repr(prompts)[:200] + err[-300:])
-    finally:
-        e.cleanup([p])
-
-    # l) 名表缓存损坏 ⇒ 注入面零影响（缓存与注入链路隔离）
-    for label, payload in (("损坏 JSON", "{not json"), ("口径版本不匹配", None)):
-        e = Env("t35l", extra_env={"DISPATCH_PROFILE": "mod"})
-        _mk_persona(e.root, "mod", prompt_text=ptext,
-                    cap_yml={"knowledge": ["library/dom", "desk/me", "archive"]})
-        d = _lore_fixture(e.root)
-        cdir = os.path.join(e.root, "run", "kb-index")
-        os.makedirs(cdir, exist_ok=True)
-        if payload is None:
-            payload = json.dumps({"version": -1, "root": e.root, "docs": {}})
-        with open(os.path.join(cdir, "names.json"), "w") as f:
-            f.write(payload)
-        p = e.start_wrap()
-        try:
-            rc = p.wait(timeout=20)
-            prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-            blk = prompts[1] if len(prompts) == 2 else ""
-            ok("T35l 名表缓存%s ⇒ 三档清单仍完整（注入链路不读缓存）" % label,
-               rc == 0 and "### 知识库 `library/dom`" in blk
-               and "### 书桌 `desk/me`" in blk and "### 档案库 `archive`" in blk
-               and os.path.join(d["lib"], "facts", "a.md") in blk
-               and e.read_diag() is None, blk[:400])
-        finally:
-            e.cleanup([p])
-
-
-def t32_cap_degradation():
-    """T32 能力装配降级分支专项（资产面异常只降级不硬失败）：
-    ① 无 cap.yml = 纯正文能力（WARN + 只注入正文）；② cap.yml 损坏/顶层非 mapping ⇒ 跳过
-    该能力（含正文）；③ bundle 能力（无 prompt.md）合法 ⇒ info 日志、**不是 WARN**；
-    ④ 捆绑 skill 缺失 ⇒ WARN 跳过且**不回落全局**；⑤ cap.yml 禁键（caps）⇒ WARN 忽略该键。"""
-    # ① 纯正文能力（无 cap.yml）
-    e = Env("t32a", extra_env={"DISPATCH_PROFILE": "plain"})
-    _mk_cap(e.root, "plain", prompt_text="# plain cap\n", cap_yml=None)
-    _mk_manifest(e.root, "plain")
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T32a 无 cap.yml → 正文照常注入（纯正文能力）",
-           rc == 0 and _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-           == ["# plain cap\n"], repr(err)[-300:])
-        ok("T32a WARN 点名「按纯正文能力处理」", "纯正文能力" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-    # ② cap.yml 损坏（YAML 语法错）⇒ 跳过该能力（含正文）
-    e = Env("t32b", extra_env={"DISPATCH_PROFILE": "combo"})
-    _mk_cap(e.root, "bad", prompt_text="# bad cap\n",
-            cap_yml="summary: [未闭合\n\ttools: {")
-    _mk_cap(e.root, "good", prompt_text="# good cap\n", cap_yml={"summary": "g"})
-    _mk_manifest(e.root, "combo", caps=["bad", "good"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        ok("T32b cap.yml 损坏 → 跳过该能力（正文也不注入），其余能力照常",
-           rc == 0 and prompts == ["# good cap\n"], repr(prompts)[:300])
-        ok("T32b 损坏告警点名「跳过该能力（含正文注入）」",
-           "解析失败" in err and "含正文注入" in err, err[-400:])
-        ok("T32b 无诊断", e.read_diag() is None)
-    finally:
-        e.cleanup([p])
-    # ②' cap.yml 顶层非 mapping（YAML 合法但不是声明对象）
-    e = Env("t32b2", extra_env={"DISPATCH_PROFILE": "scalar"})
-    _mk_cap(e.root, "scalar", prompt_text="# s\n", cap_yml="- a\n- b\n")
-    _mk_manifest(e.root, "scalar")
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T32b2 顶层非 mapping → 跳过该能力 + WARN",
-           rc == 0 and _argv_flag_pairs(e.read_argv(), "--append-system-prompt") == []
-           and "顶层非 mapping" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-    # ③ bundle 能力（无 prompt.md、有捆绑声明）= 合法形态
-    e = Env("t32c", extra_env={"DISPATCH_PROFILE": "bundle"})
-    _mk_skill(e.root, "kit-skill")
-    _mk_cap(e.root, "kit", prompt_text=None, cap_yml={"skills": ["kit-skill"]})
-    _mk_manifest(e.root, "bundle", caps=["kit"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        argv = e.read_argv()
-        ok("T32c bundle 能力：无正文注入、捆绑 skill 照常",
-           rc == 0 and _argv_flag_pairs(argv, "--append-system-prompt") == []
-           and [os.path.basename(x) for x in _argv_flag_pairs(argv, "--skill")]
-           == ["kit-skill"], repr(argv))
-        ok("T32c bundle 是合法形态 ⇒ 不刷 WARN（只有 info 行）",
-           "bundle 能力" in err and "WARN: 能力 'kit' 无 prompt.md" not in err,
-           err[-400:])
-    finally:
-        e.cleanup([p])
-    # ④ 捆绑 skill 缺失 ⇒ WARN 跳过、不回落全局（全局 skills/ 有同名目录也不注入）
-    e = Env("t32d", extra_env={"DISPATCH_PROFILE": "review"})
-    decoy = os.path.join(e.root, "skills", "ghost-skill")   # 全局层诱饵（同名，不得被回落命中）
-    os.makedirs(decoy, exist_ok=True)
-    _w(os.path.join(decoy, "SKILL.md"), "# decoy\n")
-    _mk_persona(e.root, "review", cap_yml={"skills": ["ghost-skill"]})
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        argv = e.read_argv()
-        ok("T32d 缺失 skill 被跳过且未回落全局（无 --skill 指向诱饵目录）",
-           rc == 0 and _argv_flag_pairs(argv, "--skill") == [], repr(argv))
-        ok("T32d WARN 点名「只解析 bots/skills/ 一级、不回落全局」",
-           "不回落全局" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-    # ⑤ cap.yml 禁键 caps（能力不得引用能力）⇒ WARN 忽略、不展开
-    e = Env("t32e", extra_env={"DISPATCH_PROFILE": "outer"})
-    _mk_cap(e.root, "selfref", prompt_text="# selfref\n",
-            cap_yml={"caps": ["nested"], "summary": "s"})
-    _mk_cap(e.root, "nested", prompt_text="# nested\n")
-    _mk_manifest(e.root, "outer", caps=["selfref"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        ok("T32e 能力引用能力被拒（nested 正文未注入）",
-           rc == 0 and prompts == ["# selfref\n"], repr(prompts)[:300])
-        ok("T32e 非法键 WARN 在场（点名合法键闭合集）",
-           "非法键" in err and "caps" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-
-
-def t33_injection_order_equivalence():
-    """T33 注入序等价性（链退役后由装配器硬规则承担 executor 前置）：
-    ① 任务形态：caps 里**未列** executor ⇒ 仍恒首注入；② caps 里**非首位列** executor ⇒
-    提到首位并去重（恰一份，WARN 点名）；②' caps 首位就是 executor（如 `executor` profile 自身）⇒
-    静默去重不刷 WARN；③ resident 形态：即使 caps 列了 executor 也照常按 caps 序（resident 不前置基线，
-    但显式声明合法）；④ 显式人格恒在基线之后。"""
-    # ① 任务形态 + 未列 executor
-    e = Env("t33a", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_executor(e.root)
-    _mk_persona(e.root, "review", prompt_text="# reviewer\n")
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        ok("T33a 任务形态 executor 正文恒首、显式人格在后",
-           rc == 0 and prompts == [EXEC_TEXT, "# reviewer\n"], repr(prompts)[:300])
-    finally:
-        e.cleanup([p])
-    # ② 任务形态 + caps 显式列 executor（冗余声明）
-    e = Env("t33b", extra_env={"DISPATCH_PROFILE": "combo"})
-    _mk_executor(e.root)
-    _mk_cap(e.root, "review", prompt_text="# reviewer\n")
-    _mk_manifest(e.root, "combo", caps=["review", "executor"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        ok("T33b 列在非首位的去重：executor 恰一份且被提到首（不因 caps 序而后移）",
-           rc == 0 and prompts == [EXEC_TEXT, "# reviewer\n"], repr(prompts)[:300])
-        ok("T33b 非首位声明 WARN 在场（作者意图与「基线恒首」不一致）",
-           "非首位" in err and "提到首位" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-    # ③ resident 形态 + caps 显式列 executor（合法，按 caps 序、不额外前置）
-    e = Env("t33c", fake_mode="hang_settle",
-            extra_env={"AGENTD_RESIDENT": "1",
-                       "AGENTD_SESSION_NAME": "bot/zz-order-t33",
-                       "DISPATCH_PROFILE": "combo"})
-    _mk_executor(e.root)
-    _mk_cap(e.root, "review", prompt_text="# reviewer\n")
-    _mk_manifest(e.root, "combo", caps=["review", "executor"])
-    p = e.start_wrap()
-    try:
-        ok("T33c sock 就位", e.wait_sock())
-        e.wait_argv()
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        ok("T33c resident 按 caps 序（review 在前）、不额外前置基线",
-           prompts == ["# reviewer\n", EXEC_TEXT], repr(prompts)[:300])
-    finally:
-        e.cleanup([p])
-    # ④ 任务形态 + profile 无 caps 字段 ⇒ 只剩基线能力（WARN 点名）
-    e = Env("t33d", extra_env={"DISPATCH_PROFILE": "nocaps"})
-    _mk_executor(e.root)
-    _mk_manifest(e.root, "nocaps", raw=json.dumps({"name": "nocaps"}))
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        ok("T33d 薄清单无 caps → 只注入基线能力 + WARN",
-           rc == 0 and prompts == [EXEC_TEXT] and "无 caps 字段" in err,
-           repr(prompts)[:200] + err[-300:])
-    finally:
-        e.cleanup([p])
-    # ②' caps 首位就是基线能力（`executor` profile 自身的形态，也是存量 spec.command
-    # `DISPATCH_PROFILE=executor` 的展开结果）⇒ 静默去重、零 WARN 噪声
-    e = Env("t33e", extra_env={"DISPATCH_PROFILE": "executor"})
-    _mk_executor(e.root)
-    _mk_manifest(e.root, "executor", caps=["executor"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        prompts = _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-        warns = [l for l in err.split("\n") if "WARN" in l]
-        ok("T33e caps 首位即基线 ⇒ 恰一份正文且不刷基线去重 WARN（存量 "
-           "DISPATCH_PROFILE=executor 形态无噪声；其余 WARN 如探针扩展缺失不属本判据）",
-           rc == 0 and prompts == [EXEC_TEXT]
-           and not [l for l in warns if "caps" in l or "非首位" in l or "executor" in l],
-           repr(prompts)[:200] + json.dumps(warns, ensure_ascii=False)[:400])
-    finally:
-        e.cleanup([p])
-
-
-def t34_profile_banned_fields():
-    """T34 profile 薄清单的直挂禁字段（profile 只列 caps，不给逃生口）：直挂 skills/tools/
-    knowledge ⇒ WARN 忽略该字段（注入面不受影响）；损坏 JSON / 顶层非对象 ⇒ WARN 跳过。"""
-    e = Env("t34a", extra_env={"DISPATCH_PROFILE": "leaky"})
-    _mk_skill(e.root, "should-not-load")
-    _mk_cap(e.root, "cap-ok", prompt_text="# cap ok\n", cap_yml={"summary": "s"})
-    _mk_manifest(e.root, "leaky", caps=["cap-ok"],
-                 extra={"skills": ["should-not-load"], "tools": ["read"],
-                        "knowledge": ["kb/dom"], "excludeTools": ["bash"]})
-    _mk_kb(e.root, os.path.join("kb", "dom"), [("in.md", "w")])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        argv = e.read_argv()
-        ok("T34a 直挂禁字段一律被忽略（无 --skill/-t/知识清单块，-xt 只有基线）",
-           rc == 0 and _argv_flag_pairs(argv, "--skill") == []
-           and "-t" not in (argv or [])
-           and _argv_flag_pairs(argv, "--append-system-prompt") == ["# cap ok\n"]
-           and _argv_flag_pairs(argv, "-xt") == ["ask_user"], repr(argv)[:300])
-        ok("T34a 四个禁字段各有 WARN（点名「profile 只列 caps」）",
-           err.count("清单直挂") == 4 and "profile 只列 caps" in err, err[-600:])
-    finally:
-        e.cleanup([p])
-    # ② 损坏 JSON / 顶层非对象
-    e = Env("t34b", extra_env={"DISPATCH_PROFILE": "broken"})
-    _mk_executor(e.root)
-    _mk_manifest(e.root, "broken", raw="{ 不是 JSON")
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T34b 清单损坏 → WARN 跳过、任务形态仍注入基线能力",
-           rc == 0 and _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-           == [EXEC_TEXT] and "不可读/损坏" in err, err[-300:])
-    finally:
-        e.cleanup([p])
-    e = Env("t34c", extra_env={"DISPATCH_PROFILE": "arr"})
-    _mk_executor(e.root)
-    _mk_manifest(e.root, "arr", raw='["not", "an", "object"]')
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T34c 清单顶层非对象 → WARN 跳过、基线能力照常",
-           rc == 0 and _argv_flag_pairs(e.read_argv(), "--append-system-prompt")
-           == [EXEC_TEXT] and "顶层非对象" in err, err[-300:])
-    finally:
-        e.cleanup([p])
-
-
 EXEC_PROFILE_MODEL = "llm-router/executor"      # 生产 bots/profiles/executor.json 的 model 现值
 PLANNER_MODEL = "llm-router/planner"            # 生产常驻 profile（dispatcher/*-lead）的 model 现值
-
-
-def t36_task_model_fallback():
-    """T36 任务形态缺省回落 `executor` profile（模型角色档接入面）：`model` 只住 profile ⇒
-    未设 DISPATCH_PROFILE 的任务形态回落缺省 profile 拿它的 model。四态：
-    ① 非 resident ∧ 无 profile ⇒ --model = 回落面的值，且 caps 与回落前逐字一致（executor 首位、无重复）；
-    ② 非 resident ∧ 显式合法 profile ⇒ model 来自该 profile、**不打回落日志**；
-    ③ resident ∧ 显式 profile ⇒ 该 profile 的 model；resident ∧ 无 profile ⇒ **不回落**、无 --model；
-    ④ fail-soft（硬要求）：回落面缺席 / 无 model 字段 / model 非字符串 ⇒ 无 --model、wrap 不失败、WARN 在场。
-    夹具全在临时树（`Env.root`），**不动生产 `bots/profiles/`**。"""
-    # ① 非 resident ∧ 无 DISPATCH_PROFILE ⇒ 回落 executor profile
-    e = Env("t36a")
-    _mk_executor(e.root)
-    _mk_manifest(e.root, "executor", caps=["executor"], model=EXEC_PROFILE_MODEL)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T36a 任务形态无 profile ⇒ --model 恰一个且 = 回落面的值", 
-           rc == 0 and _argv_flag_pairs(argv, "--model") == [EXEC_PROFILE_MODEL],
-           "rc=%s argv=%r" % (rc, argv))
-        ok("T36a caps 与回落前逐字一致（基线能力首位、无重复：正文恰一份）",
-           _argv_flag_pairs(argv, "--append-system-prompt") == [EXEC_TEXT], repr(argv)[:300])
-        ok("T36a 基线 -xt ask_user 仍在场（回落不改变工具面基线）",
-           _argv_flag_pairs(argv, "-xt") == ["ask_user"], repr(argv))
-        ok("T36a 回落日志在场（点名未设 DISPATCH_PROFILE + 回落面 + 最终 model 值）",
-           "未设 DISPATCH_PROFILE" in err and "回落" in err and EXEC_PROFILE_MODEL in err,
-           err[-400:])
-        ok("T36a 无诊断（回落不是异常）", e.read_diag() is None)
-    finally:
-        e.cleanup([p])
-    # ② 非 resident ∧ 显式合法 profile ⇒ model 来自该 profile、不打回落日志
-    e = Env("t36b", extra_env={"DISPATCH_PROFILE": "review"})
-    _mk_executor(e.root)
-    _mk_persona(e.root, "review", prompt_text="# review persona\n",
-                model=EXEC_PROFILE_MODEL)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T36b 显式 review profile ⇒ --model 来自 review.json",
-           rc == 0 and _argv_flag_pairs(argv, "--model") == [EXEC_PROFILE_MODEL],
-           "rc=%s argv=%r" % (rc, argv))
-        ok("T36b 基线仍恒首 + 人格叠加（序不变）",
-           _argv_flag_pairs(argv, "--append-system-prompt") == [EXEC_TEXT, "# review persona\n"],
-           repr(argv)[:300])
-        ok("T36b 不打回落日志（显式指定 = 作者有意图）", "未设 DISPATCH_PROFILE" not in err,
-           err[-400:])
-    finally:
-        e.cleanup([p])
-    # ③ resident 形态：显式 profile 拿它的 model；无 profile **不回落**
-    e = Env("t36c", fake_mode="hang_settle",
-            extra_env={"AGENTD_RESIDENT": "1",
-                       "AGENTD_SESSION_NAME": "bot/zz-lead-t36",
-                       "DISPATCH_PROFILE": "agentfw-lead"})
-    _mk_executor(e.root)          # 基线能力在场也不该被 resident 装载
-    _mk_cap(e.root, "lead", prompt_text="# lead persona\n")
-    _mk_manifest(e.root, "agentfw-lead", caps=["lead"], model=PLANNER_MODEL)
-    p = e.start_wrap()
-    try:
-        ok("T36c sock 就位", e.wait_sock())
-        e.wait_argv()
-        argv = e.read_argv()
-        ok("T36c resident + 常驻 profile ⇒ --model = planner 角色档",
-           _argv_flag_pairs(argv, "--model") == [PLANNER_MODEL], repr(argv))
-        ok("T36c resident 不前置基线能力（行为不变）",
-           _argv_flag_pairs(argv, "--append-system-prompt") == ["# lead persona\n"],
-           repr(argv)[:300])
-    finally:
-        e.cleanup([p])
-    e = Env("t36d", fake_mode="hang_settle",
-            extra_env={"AGENTD_RESIDENT": "1",
-                       "AGENTD_SESSION_NAME": "bot/zz-noprofile-t36"})
-    _mk_executor(e.root)
-    _mk_manifest(e.root, "executor", caps=["executor"], model=EXEC_PROFILE_MODEL)
-    p = e.start_wrap()
-    try:
-        ok("T36d sock 就位", e.wait_sock())
-        e.wait_argv()
-        argv = e.read_argv()
-        ok("T36d resident 无 profile ⇒ **不回落**（无 --model、argv 逐字不变）",
-           "--model" not in (argv or [])
-           and _argv_flag_pairs(argv, "--append-system-prompt") == []
-           and _argv_flag_pairs(argv, "-xt") == [], repr(argv))
-    finally:
-        e.cleanup([p])
-    # resident 不收敛（hang_settle）⇒ stderr 只能在杀完进程组后读（否则 read() 无限阻塞 = 假活）
-    err = ""
-    try:
-        p.wait(timeout=10)
-        err = p.stderr.read().decode("utf-8", "replace")
-    except Exception as ex:
-        err = "(stderr 不可读: %r)" % (ex,)
-    ok("T36d resident 不打回落日志（回落只属任务形态）",
-       "未设 DISPATCH_PROFILE" not in err, err[-400:])
-    # ④ fail-soft 三子态（夹具里做，不动生产 executor.json）
-    # ④-1 回落面缺席
-    e = Env("t36e")
-    _mk_executor(e.root)          # 只有 executor **能力**，无 executor **profile 清单**
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T36e 回落面缺席 ⇒ 不 die（收敛退出 0）且不注入 --model",
-           rc == 0 and "--model" not in (argv or []), "rc=%s argv=%r" % (rc, argv))
-        ok("T36e WARN 在场（点名回落 + 不注入 --model 的成因）",
-           "未设 DISPATCH_PROFILE" in err and "不注入 --model" in err, err[-400:])
-        ok("T36e 基线能力照常注入（fail-soft 不伤人格面）",
-           _argv_flag_pairs(argv, "--append-system-prompt") == [EXEC_TEXT], repr(argv)[:300])
-        ok("T36e 无诊断（不属未捕获异常兜底）", e.read_diag() is None)
-    finally:
-        e.cleanup([p])
-    # ④-2 回落面在场但无 `model` 字段
-    e = Env("t36f")
-    _mk_executor(e.root)
-    _mk_manifest(e.root, "executor", caps=["executor"])
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T36f 回落面无 model 字段 ⇒ 不 die + 不注入 --model",
-           rc == 0 and "--model" not in (argv or []), "rc=%s argv=%r" % (rc, argv))
-        ok("T36f WARN 在场（fail-soft 分支可归因）",
-           "未设 DISPATCH_PROFILE" in err and "不注入 --model" in err, err[-400:])
-    finally:
-        e.cleanup([p])
-    # ④-3 回落面 `model` 非非空字符串
-    e = Env("t36g")
-    _mk_executor(e.root)
-    _mk_manifest(e.root, "executor", caps=["executor"], model=123)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        ok("T36g model 类型非法 ⇒ 不 die + 不注入 --model",
-           rc == 0 and "--model" not in (argv or []), "rc=%s argv=%r" % (rc, argv))
-        ok("T36g 两条 WARN：类型告警 + 回落 fail-soft 告警",
-           "model 字段非非空字符串" in err and "不注入 --model" in err, err[-400:])
-        ok("T36g 基线能力照常注入",
-           _argv_flag_pairs(argv, "--append-system-prompt") == [EXEC_TEXT], repr(argv)[:300])
-    finally:
-        e.cleanup([p])
-
-
-CC_EXT_REL = os.path.join("bots", "extensions", "context-compaction", "index.ts")
-
-
-def _mk_cc_ext(root, present=True):
-    """建（present=False 则不建）profile `contextCompaction` 的执行体扩展单元（桩文件即可：
-    本组断言的是装配面，不跑真 pi）。返回其绝对路径。"""
-    p = os.path.join(root, CC_EXT_REL)
-    if present:
-        _w(p, "// stub extension\nexport default function () {}\n")
-    return p
-
-
-def _mk_pi_env_shim(e, keys=("AGENTD_CONTEXT_COMPACTION",)):
-    """把 Env 的 pi 可执行换成一个壳：先把关心的 env 落 `<flags>/cc_env`（JSON，缺失 = null），
-    再 exec 真 fakepi。断言「wrap 到底给 pi 传了什么 env」需要子进程侧的取证面；fakepi_rpc.py
-    的既有快照只含就绪门两枚变量，故用壳补一层（不改被测件、也不改 fake 的既有语义）。
-    返回 cc_env 文件路径。"""
-    dumper = os.path.join(e.root, "env-dump.py")
-    _w(dumper, "import json, os, sys\n"
-               "out = os.path.join(os.environ['FAKE_FLAG_DIR'], 'cc_env')\n"
-               "with open(out, 'w') as g:\n"
-               "    json.dump({k: os.environ.get(k) for k in sys.argv[1:]}, g)\n")
-    shim = os.path.join(e.root, "pi-shim.sh")
-    _w(shim, "#!/bin/bash\npython3 '%s' %s\nexec python3 '%s' \"$@\"\n"
-       % (dumper, " ".join(keys), FAKEPI))
-    os.chmod(shim, 0o755)
-    e.env["AGENTD_WRAP_PI_BIN"] = shim
-    return os.path.join(e.flags, "cc_env")
-
-
-def _read_cc_env(e):
-    """壳落的 env 快照 → dict ∨ None（未落盘）。值 = 该 env 在 pi 子进程里的真值（缺失 = None）。"""
-    p = os.path.join(e.flags, "cc_env")
-    if not os.path.exists(p):
-        return None
-    with open(p, encoding="utf-8") as f:
-        return json.load(f)
-
-
-def t37_cc_assembly():
-    """T37 profile 的 `contextCompaction`（每 profile 的上下文压缩策略）装配面。
-
-    四种装配形态 + resident 同等 + 注入位：
-      ① 合法策略 ⇒ env（归一化紧凑 JSON）+ `-e` 执行体同时在场，且 `-e` 位在能力注入之后；
-      ② 无策略 ⇒ 两者都不在场（执行体在场也不注：开关是策略不是文件），且从宿主继承的陈旧
-         同名 env 被显式洗掉（「无策略 = env 不在场」是硬语义）；
-      ③ 非法策略（类型错 / 白名单外的键 / 无触发点）⇒ WARN + 不注入，会话照起（rc=0）；
-      ④ 策略合法但执行体文件缺失 ⇒ WARN + env/`-e` 两者都不注（同进同退）；
-      ⑤ resident 形态同等装配（策略住 profile，与形态无关）。"""
-    # ① 合法策略
-    e = Env("t37a", extra_env={"DISPATCH_PROFILE": "cc"})
-    _mk_executor(e.root)
-    _mk_cap(e.root, "cc", prompt_text="# cc cap\n", cap_yml={"summary": "s"})
-    _mk_manifest(e.root, "cc", caps=["executor", "cc"],
-                 extra={"contextCompaction": {"triggerRatio": 0.8,
-                                              "triggerTokens": 120000,
-                                              "customInstructions": "侧重代码"}})
-    ext = _mk_cc_ext(e.root)
-    _mk_pi_env_shim(e)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        envdoc = _read_cc_env(e)
-        raw = (envdoc or {}).get("AGENTD_CONTEXT_COMPACTION")
-        ok("T37a 收敛退出 0", rc == 0, "rc=%s" % rc)
-        ok("T37a `-e` 执行体恰一份且指向 <root>/" + CC_EXT_REL,
-           _argv_flag_pairs(argv, "-e").count(ext) == 1 and ext.endswith(CC_EXT_REL),
-           repr(argv)[:400])
-        ok("T37a 注入位在能力之后（`-e` 下标 > 最后一个 --append-system-prompt 下标）",
-           argv is not None and argv.index(ext)
-           > max(i for i, a in enumerate(argv) if a == "--append-system-prompt"),
-           repr(argv)[:400])
-        ok("T37a env 在场且 = 归一化紧凑 JSON（enabled 缺省物化为 true，无空格）",
-           raw is not None and " " not in raw
-           and json.loads(raw) == {"enabled": True, "triggerRatio": 0.8,
-                                   "triggerTokens": 120000,
-                                   "customInstructions": "侧重代码"},
-           repr(raw))
-        ok("T37a 装配日志可取证（trigger/ratio/enabled/ext 四件齐）",
-           "contextCompaction 装配：trigger=120000 ratio=0.8 enabled=True ext=" in err
-           and ext in err, err[-600:])
-        ok("T37a 无 WARN（合法策略不刷噪声）", "contextCompaction" not in
-           "".join(l for l in err.splitlines(True) if "WARN" in l), err[-600:])
-    finally:
-        e.cleanup([p])
-
-    # ② 无策略（执行体在场也不注）+ 宿主陈旧 env 被洗掉
-    e = Env("t37b", extra_env={"DISPATCH_PROFILE": "executor",
-                               "AGENTD_CONTEXT_COMPACTION": '{"enabled":false}'})
-    _mk_executor(e.root)
-    _mk_manifest(e.root, "executor", caps=["executor"], model=EXEC_PROFILE_MODEL)
-    ext = _mk_cc_ext(e.root)
-    _mk_pi_env_shim(e)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        envdoc = _read_cc_env(e)
-        ok("T37b 无策略 ⇒ 不注 `-e`、不传 env（宿主陈旧值也被显式洗掉）",
-           rc == 0 and envdoc is not None
-           and envdoc.get("AGENTD_CONTEXT_COMPACTION") is None
-           and ext not in _argv_flag_pairs(argv, "-e"),
-           "rc=%s env=%r argv=%r" % (rc, envdoc, argv)[:400])
-        ok("T37b 不打装配日志（零行为变更：现役 profile 一律不声明该字段）",
-           "contextCompaction" not in err, err[-400:])
-    finally:
-        e.cleanup([p])
-
-    # ③ 非法策略：类型错 / 白名单外的键（含不可达面）/ 无触发点
-    for tag, bad, needle in (
-            ("t37c1", {"triggerTokens": "abc"}, "triggerTokens 非正整数"),
-            ("t37c2", {"triggerToken": 100}, "白名单外的键"),
-            ("t37c3", {"keepRecentTokens": 5, "triggerTokens": 100}, "keepRecentTokens"),
-            ("t37c4", {}, "既无 triggerTokens 也无 triggerRatio"),
-            ("t37c5", {"triggerRatio": 1.5}, "triggerRatio 非 0<r<=1"),
-            ("t37c6", {"triggerTokens": 100, "customInstructions": "x" * 2001},
-             "customInstructions 超 2000 字符"),
-            ("t37c7", ["not", "an", "object"], "顶层非对象")):
-        e = Env(tag, extra_env={"DISPATCH_PROFILE": "cc"})
-        _mk_executor(e.root)
-        _mk_manifest(e.root, "cc", caps=["executor"],
-                     extra={"contextCompaction": bad})
-        ext = _mk_cc_ext(e.root)
-        _mk_pi_env_shim(e)
-        p = e.start_wrap()
-        try:
-            rc = p.wait(timeout=20)
-            argv = e.read_argv()
-            err = p.stderr.read().decode("utf-8", "replace")
-            envdoc = _read_cc_env(e)
-            ok("T37c %s 非法策略 ⇒ WARN（%s）+ env/`-e` 都不注 + 会话照起"
-               % (tag, needle),
-               rc == 0 and "contextCompaction 非法" in err and needle in err
-               and "不装配" in err
-               and (envdoc or {}).get("AGENTD_CONTEXT_COMPACTION") is None
-               and ext not in _argv_flag_pairs(argv, "-e"),
-               "rc=%s env=%r err=%r" % (rc, envdoc, err[-400:]))
-            ok("T37c %s 非法策略不影响其余装配面（基线能力 + --model 照常）"
-               % tag,
-               _argv_flag_pairs(argv, "--append-system-prompt") == [EXEC_TEXT],
-               repr(argv)[:300])
-        finally:
-            e.cleanup([p])
-
-    # ④ 策略合法但执行体缺失
-    e = Env("t37d", extra_env={"DISPATCH_PROFILE": "cc"})
-    _mk_executor(e.root)
-    _mk_manifest(e.root, "cc", caps=["executor"],
-                 extra={"contextCompaction": {"enabled": False}})
-    ext = _mk_cc_ext(e.root, present=False)
-    _mk_pi_env_shim(e)
-    p = e.start_wrap()
-    try:
-        rc = p.wait(timeout=20)
-        argv = e.read_argv()
-        err = p.stderr.read().decode("utf-8", "replace")
-        envdoc = _read_cc_env(e)
-        ok("T37d 执行体缺失 ⇒ WARN + env/`-e` 同进同退都不注 + 会话照起",
-           rc == 0 and "contextCompaction 执行体缺失" in err and ext in err
-           and (envdoc or {}).get("AGENTD_CONTEXT_COMPACTION") is None
-           and ext not in _argv_flag_pairs(argv, "-e"),
-           "rc=%s env=%r err=%r" % (rc, envdoc, err[-400:]))
-    finally:
-        e.cleanup([p])
-
-    # ⑤ resident 形态同等装配
-    e = Env("t37e", extra_env={"DISPATCH_PROFILE": "cc", "AGENTD_RESIDENT": "1",
-                               "AGENTD_SESSION_NAME": "bot/t37e"},
-            with_prompt=False, fake_mode="hang_settle")
-    _mk_manifest(e.root, "cc", caps=["cc"],
-                 extra={"contextCompaction": {"triggerTokens": 1}})
-    _mk_cap(e.root, "cc", prompt_text="# cc cap\n", cap_yml={"summary": "s"})
-    ext = _mk_cc_ext(e.root)
-    _mk_pi_env_shim(e)
-    p = e.start_wrap()
-    try:
-        ok("T37e resident 等到 argv 快照", e.wait_argv(), e.sock)
-        argv = e.read_argv()
-        envdoc = _read_cc_env(e)
-        raw = (envdoc or {}).get("AGENTD_CONTEXT_COMPACTION")
-        ok("T37e resident 形态同等装配（env + `-e` 都在场，resident 不前置基线能力）",
-           raw is not None and json.loads(raw) == {"enabled": True, "triggerTokens": 1}
-           and _argv_flag_pairs(argv, "-e").count(ext) == 1
-           and _argv_flag_pairs(argv, "--append-system-prompt") == ["# cc cap\n"],
-           "env=%r argv=%r" % (raw, argv)[:400])
-    finally:
-        e.cleanup([p])
 
 
 def t29_child_exts():
@@ -2909,85 +1203,6 @@ def t43_heartbeat_prompt_anchor_lines():
        "缺括注 ⇒ 执行者拿到波浪号路径却不知道权威现值在哪")
 
 
-def t44_provider_injection():
-    """T44 `--provider` 注入（`d-isqn` = B）：声明源只有既有的 profile `model` 字段，
-    provider 段由其派生（**不新增 profile 字段、不硬编码 provider 名**）。四态：
-    ① `<provider>/<id>` 形式 ⇒ argv 含 `--provider <provider 段>` 与 `--model <原值>`，且 provider 在 model 之前；
-    ② profile 无 model ∨ 解析不到 ⇒ **不含** `--provider`（落回 settings.json 默认）；
-    ③ model 不含 `/`（裸模型 id）⇒ **不含** `--provider`，`--model` 照旧注入；
-    ④ 畸形值（`/planner`、`a/b/c`）⇒ **不 die**（rc=0）且 **不含** `--provider`（fail-soft 是硬要求：
-    本路径影响所有任务 spawn）。夹具全在临时树（`Env.root`），**不动生产 `bots/profiles/`**。"""
-    def _argv_task(tag, model):
-        """任务形态跑一轮，返回 (rc, argv, Env, proc)。调用方负责 cleanup。"""
-        e = Env(tag)
-        _mk_executor(e.root)
-        _mk_manifest(e.root, "executor", caps=["executor"], model=model)
-        p = e.start_wrap()
-        rc = p.wait(timeout=20)
-        return rc, e.read_argv(), e, p
-
-    # ① 现网形态：model = llm-router/<角色>
-    rc, argv, e, p = _argv_task("t44a", "llm-router/planner")
-    try:
-        ok("T44a 任务形态收敛退出 0", rc == 0, "rc=%s" % rc)
-        ok("T44a argv 含 --provider llm-router（恰一个，由 model 的 provider 段派生）",
-           _argv_flag_pairs(argv, "--provider") == ["llm-router"], repr(argv))
-        ok("T44a argv 含 --model llm-router/planner（既有注入不变，恰一个）",
-           _argv_flag_pairs(argv, "--model") == ["llm-router/planner"], repr(argv))
-        ok("T44a 注入序 = --provider 在 --model 之前（两形态一致的固定序）",
-           argv is not None and argv.index("--provider") < argv.index("--model"),
-           repr(argv))
-        ok("T44a 基线 -xt ask_user 仍在场（provider 注入不改变工具面）",
-           _argv_flag_pairs(argv, "-xt") == ["ask_user"], repr(argv))
-    finally:
-        e.cleanup([p])
-    # ② profile 无 model ⇒ 不拼 --provider（也不拼 --model）
-    rc, argv, e, p = _argv_task("t44b", None)
-    try:
-        ok("T44b profile 无 model ⇒ 退出 0 且 argv 不含 --provider",
-           rc == 0 and "--provider" not in (argv or []), "rc=%s argv=%r" % (rc, argv))
-        ok("T44b 同时不含 --model（model 只住 profile，两者同源缺席）",
-           "--model" not in (argv or []), repr(argv))
-    finally:
-        e.cleanup([p])
-    # ②' profile 解析不到（resident + 清单缺失）⇒ 不拼 --provider
-    e = Env("t44b2", fake_mode="hang_settle",
-            extra_env={"AGENTD_RESIDENT": "1",
-                       "AGENTD_SESSION_NAME": "bot/zz-ghost-t44",
-                       "DISPATCH_PROFILE": "ghost"})
-    p = e.start_wrap()
-    try:
-        ok("T44b2 sock 就位", e.wait_sock())
-        e.wait_argv()
-        argv = e.read_argv()
-        ok("T44b2 resident + profile 清单缺失 ⇒ argv 不含 --provider（解析不到 = 不注入）",
-           argv is not None and "--provider" not in argv, repr(argv))
-    finally:
-        e.cleanup([p])
-    # ③ model 不含 `/`（裸模型 id）⇒ --model 照旧、无 --provider
-    rc, argv, e, p = _argv_task("t44c", "qwen3.8-max")
-    try:
-        ok("T44c model 无斜杠 ⇒ --model 原样注入",
-           rc == 0 and _argv_flag_pairs(argv, "--model") == ["qwen3.8-max"],
-           "rc=%s argv=%r" % (rc, argv))
-        ok("T44c model 无斜杠 ⇒ argv 不含 --provider（provider 无从派生）",
-           "--provider" not in (argv or []), repr(argv))
-    finally:
-        e.cleanup([p])
-    # ④ 畸形值 fail-soft（两子态：provider 段空 / 多段）
-    for tag, bad in (("t44d1", "/planner"), ("t44d2", "a/b/c")):
-        rc, argv, e, p = _argv_task(tag, bad)
-        try:
-            ok("T44d(%s) 畸形 model ⇒ 不 die（rc=0、无诊断）" % bad,
-               rc == 0 and e.read_diag() is None, "rc=%s diag=%r" % (rc, e.read_diag()))
-            ok("T44d(%s) 畸形 model ⇒ argv 不含 --provider（不猜切分点）" % bad,
-               "--provider" not in (argv or []), repr(argv))
-            ok("T44d(%s) 畸形 model ⇒ --model 仍原样注入（装配器不二次判断 model 值）" % bad,
-               _argv_flag_pairs(argv, "--model") == [bad], repr(argv))
-        finally:
-            e.cleanup([p])
-
-
 def t45_retired_marker_zero_reflow():
     """T45 已退役的 `DISPATCH_HEARTBEAT` 标记零回流（提交期钉桩，纯读文件、不起子进程）。
 
@@ -3186,35 +1401,152 @@ def t47_spec_command_env_scrub():
            sorted(scrubbed))
 
 
+LOADER_REL = os.path.join("pi-core", "agent", "extensions", "profile-loader.ts")
+PERSONA_FLAGS = ("--append-system-prompt", "--skill", "-t", "-xt", "--model", "--provider")
+
+
+def _mk_loader(root, text="export default function () {}\n"):
+    """在临时树建人格注入层扩展（`pi-core/agent/extensions/profile-loader.ts` = 自动发现面，
+    生产由 wrap 另拼一个 `-e` 钉装载序）。返回其绝对路径。"""
+    p = os.path.join(root, LOADER_REL)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(text)
+    return p
+
+
+def t48_persona_emission():
+    """T48 人格面的发射契约：**wrap 不装配人格**（解析在 persona.py、注入在 profile-loader 扩展），
+    它对人格面只有两个动作 —— ① 把注入层扩展 `-e` 进去；② 把注入层要读的输入 env 透传下去。
+      a) 注入层在场 ⇒ 恰一个 `-e <loader>`，且**零**人格 flag（--append-system-prompt/--skill/
+         -t/-xt/--model/--provider 全部不发）、也不发 context-compaction 的 `-e`（压缩策略的
+         env 与执行体装载都归注入层）；
+      b) 输入 env 透传：DISPATCH_PROFILE / AGENTD_RESIDENT / AGENT_ROOT / AGENT_SELF 原样到子进程；
+      c) 陈旧的 AGENTD_CONTEXT_COMPACTION 被洗掉（「无策略 = env 不在场」是硬语义，写者是注入层）；
+      d) 注入层缺失 ⇒ WARN 点名 + 不注入 + **会话照常收敛 exit 0**（fail-soft：绝不 die，
+         硬失败会自锁）、无诊断；
+      e) resident 形态同样注入注入层（策略/人格住 profile，与形态无关），且不注入 CHILD_EXTS。
+    人格面的**内容**断言（caps 展开序 / 回落 / 工具面并集 / knowledge / model 派生 / 压缩策略归一 /
+    降级矩阵）已全部迁到解析层单测 `test_persona.py`（P 系列）—— 同一份解析、两处断言即漂移。"""
+    # ① 注入层在场：恰一个 -e，零人格 flag
+    e = Env("t48a", extra_env={"DISPATCH_PROFILE": "review"})
+    loader = _mk_loader(e.root)
+    p = e.start_wrap()
+    try:
+        rc = p.wait(timeout=20)
+        argv = e.read_argv() or []
+        err = p.stderr.read().decode("utf-8", "replace")
+        ok("T48a 恰一个 -e 指向注入层（人格面唯一入口）",
+           argv.count(loader) == 1 and loader in argv, repr(argv)[:400])
+        leaked = [f for f in PERSONA_FLAGS if f in argv]
+        ok("T48a 零人格 flag（--append-system-prompt/--skill/-t/-xt/--model/--provider 全不发）",
+           not leaked, leaked)
+        ok("T48a 不发 context-compaction 的 -e（压缩策略归注入层）",
+           not [a for a in argv if "context-compaction" in a], repr(argv)[:300])
+        ok("T48a 装载行在场（点名 profile 与形态，排障可从 agentd.log 归因）",
+           "人格注入层装载" in err and "profile=review" in err and "form=task" in err,
+           err[-400:])
+        ok("T48a 照常收敛 exit 0、无诊断", rc == 0 and e.read_diag() is None, "rc=%s" % rc)
+        # ② 输入 env 透传
+        pe = e.read_persona_env() or {}
+        ok("T48b 输入 env 原样透传（DISPATCH_PROFILE/AGENT_ROOT/AGENT_SELF）",
+           pe.get("DISPATCH_PROFILE") == "review" and pe.get("AGENT_ROOT") == e.root
+           and pe.get("AGENT_SELF") == e.task_id, json.dumps(pe, ensure_ascii=False))
+        ok("T48b 任务形态不带 AGENTD_RESIDENT（注入层据此判形态）",
+           pe.get("AGENTD_RESIDENT") is None, json.dumps(pe, ensure_ascii=False))
+    finally:
+        e.cleanup([p])
+
+    # ③ 陈旧压缩策略 env 被洗掉
+    e = Env("t48c", extra_env={"DISPATCH_PROFILE": "review",
+                               "AGENTD_CONTEXT_COMPACTION": '{"enabled":true,"triggerTokens":1}'})
+    _mk_loader(e.root)
+    p = e.start_wrap()
+    try:
+        p.wait(timeout=20)
+        pe = e.read_persona_env() or {}
+        ok("T48c 宿主带来的陈旧 AGENTD_CONTEXT_COMPACTION 被洗掉（写者只能是注入层）",
+           "AGENTD_CONTEXT_COMPACTION" not in pe or pe.get("AGENTD_CONTEXT_COMPACTION") is None,
+           json.dumps(pe, ensure_ascii=False))
+    finally:
+        e.cleanup([p])
+
+    # ④ 注入层缺失：WARN + 不注入 + 会话照常
+    e = Env("t48d", extra_env={"DISPATCH_PROFILE": "review"})
+    p = e.start_wrap()
+    try:
+        rc = p.wait(timeout=20)
+        argv = e.read_argv() or []
+        err = p.stderr.read().decode("utf-8", "replace")
+        ok("T48d 注入层缺失 ⇒ WARN 点名「人格面缺席」+ 不拼 -e",
+           "人格注入层扩展缺失" in err and "人格面缺席" in err
+           and not [a for a in argv if "profile-loader" in a], err[-400:])
+        ok("T48d 会话照常收敛 exit 0、无诊断（fail-soft：硬失败会自锁）",
+           rc == 0 and e.read_diag() is None, "rc=%s diag=%r" % (rc, (e.read_diag() or "")[:200]))
+    finally:
+        e.cleanup([p])
+
+    # ⑤ resident 形态：注入层在场、CHILD_EXTS 不在场
+    e = Env("t48e", extra_env={"DISPATCH_PROFILE": "dispatcher", "AGENTD_RESIDENT": "1",
+                               "AGENTD_SESSION_NAME": "bot/t48e"})
+    loader = _mk_loader(e.root)
+    rel_dir = os.path.join("assistant", ".pi", "extensions", "agentd")
+    for n in ("ask-user-child.ts", "message-child.ts", "receiver-child.ts"):
+        fp = os.path.join(e.root, rel_dir, n)
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        with open(fp, "w", encoding="utf-8") as f:
+            f.write("export default function () {}\n")
+    p = e.start_wrap()
+    try:
+        e.wait_argv(15)
+        argv = e.read_argv() or []
+        pe = e.read_persona_env() or {}
+        ok("T48e resident 形态同样注入注入层（人格住 profile、与形态无关）",
+           argv.count(loader) == 1, repr(argv)[:300])
+        ok("T48e resident 不注入 CHILD_EXTS（主端扩展由 workdir 的 .pi 自动发现）",
+           not [a for a in argv if "child.ts" in a], repr(argv)[:300])
+        ok("T48e 形态输入透传（AGENTD_RESIDENT=1 + 会话名 ⇒ 注入层不前置基线、不回落）",
+           pe.get("AGENTD_RESIDENT") == "1" and pe.get("AGENTD_SESSION_NAME") == "bot/t48e"
+           and pe.get("DISPATCH_PROFILE") == "dispatcher", json.dumps(pe, ensure_ascii=False))
+        ok("T48e 零人格 flag（同任务形态）",
+           not [f for f in PERSONA_FLAGS if f in argv],
+           [f for f in PERSONA_FLAGS if f in argv])
+    finally:
+        e.cleanup([p])
+
+
 def main():
     global PASS, FAIL
     os.chmod(FAKEPI, 0o755)
-    for fn in (t1_normal, t2_relay_replace, t3_crash, t4_reject,
-               t5_idempotent, t6_window_cancel, t6b_steer_injection,
+    for fn in (t1_normal,
+               t2_relay_replace,
+               t3_crash,
+               t4_reject,
+               t5_idempotent,
+               t6_window_cancel,
+               t6b_steer_injection,
                t7_stale_takeover,
-               t8_resident_no_converge, t9_resident_exit_passthrough,
-               t10_resident_no_prompt, t11_probe_ext, t12_sock_bind_failed,
-               t13_profile, t14_profile_missing, t15_profile_unset,
-               t16_tools_whitelist, t17_tools_blacklist, t18_tools_edge,
-               t19_profile_extensions, t20_profile_extensions_empty,
-               t21_xt_merge_edges, t22_tools_field_edges,
-               t23_multi_cap_order, t24_cap_partial_missing,
-               t25_model_and_toolface_merge, t26_single_value_defense,
-               t27_resident_multi_cap, t28_knowledge,
-               t35_knowledge_tiers, t29_child_exts,
-               t30_ready_handshake, t31_ready_env_scrub,
-               t32_cap_degradation, t33_injection_order_equivalence,
-               t34_profile_banned_fields, t36_task_model_fallback,
-               t37_cc_assembly,
+               t8_resident_no_converge,
+               t9_resident_exit_passthrough,
+               t10_resident_no_prompt,
+               t11_probe_ext,
+               t12_sock_bind_failed,
+               t29_child_exts,
+               t30_ready_handshake,
+               t31_ready_env_scrub,
                t_fake_settled_inflight,
-               t38_model_error_no_report, t39_model_error_with_report,
-               t39b_model_error_zero_byte_report, t40_normal_stop_no_report,
-               t41_tail_unreadable_failsoft, t41b_tail_window_truncated,
+               t38_model_error_no_report,
+               t39_model_error_with_report,
+               t39b_model_error_zero_byte_report,
+               t40_normal_stop_no_report,
+               t41_tail_unreadable_failsoft,
+               t41b_tail_window_truncated,
                t42_resident_model_error_untouched,
                t43_heartbeat_prompt_anchor_lines,
-               t44_provider_injection, t45_retired_marker_zero_reflow,
+               t45_retired_marker_zero_reflow,
                t46_resident_prompt_delivery,
-               t47_spec_command_env_scrub):
+               t47_spec_command_env_scrub,
+               t48_persona_emission):
         print("---- %s" % fn.__name__)
         try:
             fn()

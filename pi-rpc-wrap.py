@@ -66,15 +66,20 @@ stdin，主线程只等 pi 退出）、argv 会话名钉死 $AGENTD_SESSION_NAME
 不写诊断不误报（崩溃自愈/换代归属 = runner restartPolicy=auto / control 三动作）。
 其余（socket 生命周期/.pid 伴生档/透传/小环）逐字复用。
 
-人格装配 = **两层**：解析层 `persona.py`（同目录；profile/caps → 结构化注入面，合并语义与全部
-fail-soft 降级分支的单一实现）+ 本文件的 **argv 发射层**（`_profile_argv`/`_compaction_argv`：
-把结构映射成 pi 的 flag，只此一层薄映射，映射逐条对应 pi 的 flag 语义）。机制口径权威 =
-assistant/DISPATCH.md §3，装配面逐格全文 = assistant/docs/profile-assembly.md，资产形态与字段
-规范 = bots/README.md「人格资产」/「知识库规范」节，解析层的输入输出契约 = persona.py 模块头。
-本文件只保留发射层自身的三条 pi 侧事实（详见 `_profile_argv` docstring）：`-xt`/`-t` 是**赋值**
-语义（各至多一个，拆开拼会解除形态基线屏蔽）、`-e`/`--skill` 是**累加**语义、`--provider` 注入序
-在 `--model` 之前。协议层扩展（ask-user-child/message-child/receiver-child/探针）仍归调度层注入，
-与人格装配无关。
+人格装配**不在本文件**（两层，均住别处）：解析层 `persona.py`（同目录；profile/caps →
+结构化注入面，合并语义与全部 fail-soft 降级分支的单一实现）+ 注入层 pi 扩展
+`bots/extensions/profile-loader/index.ts`（会话内把那份结构映射到 pi 的 API：系统提示追加 /
+skill 路径 / 活动工具集 / 模型 / 压缩策略）。本文件对人格面只做两件事（`_persona_ext_argv`）：
+① 把注入层扩展 `-e` 进去（同时钉住它在 pi 扩展装载序里的位置 = 先于自动发现的全局扩展，
+故人格正文落在其它扩展的追加之前）；② 透传它需要的两枚输入 env（`DISPATCH_PROFILE` = profile 名、
+`AGENTD_RESIDENT` = 形态；均来自 spec.command，逐字不改）。机制口径权威 = assistant/DISPATCH.md §3，
+装配面逐格全文 = assistant/docs/profile-assembly.md，资产形态与字段规范 = bots/README.md
+「人格资产」/「知识库规范」节，解析层的输入输出契约 = persona.py 模块头。
+**排障面的位置变更**：逐能力注入日志（`人格装配（会话内注入）：…`）与解析层告警现在写在 **pi 的
+stderr** ⇒ 落 `run/agentd/<name>.stderr.log`（与诊断的 stderr 尾同源），不再在 wrap 自己的日志里；
+会话内取证 = `/persona`。压缩策略 env 的写者也是注入层 ⇒ `spawn_pi` 恒洗掉从宿主继承的同名 env
+（「无策略 = env 不在场」是硬语义，不靠调用方环境干净）。协议层扩展（ask-user-child/
+message-child/receiver-child/探针）仍归调度层注入，与人格装配无关。
 
 失败域：观测面（accept/转发）异常只断观测不伤收敛主线；未捕获异常兜底写
 诊断后退出 1。本文件只用 python3 标准库（解析层的 pyyaml 依赖与其降级分支见 persona.py）。
@@ -136,14 +141,18 @@ CHILD_EXTS = (            # 子端扩展（相对 $AGENT_ROOT，与 core.ts 的 
 )
 PROBE_EXT_REL = "w/ext/sessiond/probe.ts"   # sessiond 探针：任务/常驻会话
                                             # 也注入，使 spec.json?v=chat 观测面 /inspect 可用
-# 人格装配的**解析层**（profile/caps → 结构化注入面）住在同目录的 `persona.py`：合并语义
-# （caps 展开序 / 工具面并集 / knowledge 并集 / model 派生 / contextCompaction 归一 / 降级矩阵）
-# 只有那一份实现，本文件是它的 **argv 发射层**（另一个消费者 = pi 侧注入适配器，经其 CLI）。
-# 常量与判据函数一律从解析层取用（不在此复制，复制即漂移）。
+# 人格装配不住在本文件：解析层 = 同目录 `persona.py`（合并语义与降级分支的单一实现），
+# 注入层 = pi 侧扩展 `bots/extensions/profile-loader/index.ts`（本文件只负责把它 `-e` 进去）。
+# 本文件对人格面只做两件事：① 注入那一个扩展；② 透传身份/人格输入 env（DISPATCH_PROFILE /
+# AGENTD_RESIDENT，来自 spec.command，逐字不改）。常量从解析层取用（不在此复制，复制即漂移）。
 import persona                                                # noqa: E402
-CONTEXT_COMPACTION_ENV = persona.CONTEXT_COMPACTION_ENV       # 归一化策略的注入通道（紧凑 JSON），
+CONTEXT_COMPACTION_ENV = persona.CONTEXT_COMPACTION_ENV       # 归一化策略的注入通道（紧凑 JSON）；
+                                                              # 写者 = profile-loader 扩展（会话内），
                                                               # 消费方 = bots/extensions/context-compaction/index.ts
-provider_of_model = persona.provider_of_model                 # model → provider 段派生（判定单点在解析层）
+PROFILE_LOADER_EXT_REL = "pi-core/agent/extensions/profile-loader.ts"   # 人格注入层（= ~/.pi/agent/
+                                            # extensions/ 的自动发现面，被追踪 ⇒ 四机同步）；
+                                            # 文件缺失 → WARN + 不注入（会话裸起、人格面缺席，
+                                            # 口径同 PROBE_EXT_REL；绝不 die——硬失败会自锁）
 
 
 def log(fmt, *args):
@@ -184,14 +193,9 @@ class Wrap:
         self.init_ok_file = proto.task_ready_path(self.root, self.name, "init-ok")
         self.recv_armed_file = proto.task_ready_path(self.root, self.name, "recv-armed")
         self.child_recv_injected = False   # build_argv 是否真注入了 receiver-child.ts
-        # profile 的 `contextCompaction` 装配态（解析层 persona.resolve 给出 → _compaction_argv
-        # 注入）：cc_policy = 归一化策略 dict ∨ None（字段缺失/非法都是 None），cc_ext = 执行体绝对
-        # 路径 ∨ None（策略合法 ∧ 文件在场才非空），cc_injected = 是否真拼了 `-e`（False ⇒ spawn_pi
-        # 也不传 env，两者同进同退）。
-        self.cc_policy = None
-        self.cc_ext = None       # 解析层给出的执行体绝对路径（策略合法 ∧ 文件在场才非空）
-        self.cc_injected = False
-        self.persona = None      # 本次装配的解析结果（persona.resolve 的结构化注入面）
+        # 人格注入层（profile-loader 扩展）是否真拼了 `-e`：False = 文件缺失（WARN 已在
+        # _persona_ext_argv 记），此时会话照起但人格面缺席 ⇒ 排障先看这条。
+        self.loader_injected = False
         self.stderr_log = os.path.join(
             os.path.dirname(self.sock_path), self.name + ".stderr.log")
         # 参数钩（仅可向下调；测试/应急用，生产不设）
@@ -335,8 +339,7 @@ class Wrap:
             argv = [self.pi_bin, "--mode", "rpc", "--session", self.session_file,
                     "-n", self.session_name or "[resident %s]" % self.name]
             argv += self._probe_ext_argv()
-            argv += self._profile_argv()
-            argv += self._compaction_argv()
+            argv += self._persona_ext_argv()
             return argv
         argv = [self.pi_bin, "--mode", "rpc", "--session", self.session_file,
                 "-n", "[task %s]" % self.name]
@@ -349,9 +352,7 @@ class Wrap:
             else:
                 log("WARN: 子端扩展缺失，跳过注入: %s", p)
         argv += self._probe_ext_argv()
-        # 形态基线排除集（任务形态 = ask_user）由解析层并入 excludeTools，本层不重复声明。
-        argv += self._profile_argv()
-        argv += self._compaction_argv()
+        argv += self._persona_ext_argv()
         return argv
 
     # ---------- knowledge 知识清单注入（规范 bots/README.md「知识库规范」） ----------
@@ -365,77 +366,48 @@ class Wrap:
         log("WARN: 探针扩展缺失，跳过注入（/inspect 不可用）: %s", p)
         return []
 
-    # ---------- 人格装配的 argv 发射层（解析层单点 = persona.py；机制口径 DISPATCH.md §3） ----------
+    # ---------- 人格注入层的装载（解析层 = persona.py，注入层 = profile-loader 扩展） ----------
 
-    def _profile_argv(self):
-        """把 `persona.resolve()` 的结构化注入面拼成 pi argv（任务/常驻两形态共用）。
+    def _persona_ext_argv(self):
+        """把人格注入层扩展 `-e` 进 pi（任务/常驻两形态同等）。
 
-        **本函数不含任何合并/降级判据**——caps 展开序、任务形态基线前置与回落、工具面并集
-        （含形态基线排除集）、knowledge 清单渲染、model→provider 派生、contextCompaction 归一
-        与全部 fail-soft 分支都在解析层（`persona.py`，机制口径 = `assistant/DISPATCH.md` §3、
-        字段规范 = `bots/README.md`「人格资产」节）。这里的映射只有一层，逐条对应 pi 的 flag 语义：
-          - `appendParts`（逐能力 prompt.md 全文 + 末位知识清单块，按注入序）→ 每项一个
-            `--append-system-prompt`（pi 对多值是**追加**语义，按序以 `appendJoiner` 拼接）；
-          - `skillPaths` → 各一个 `--skill`（pi 累加语义，与全局 skills 叠加）；
-          - `extensionPaths` → 各一个 `-e`（pi 累加语义；能力捆绑扩展只有 argv 形态能兑现——
-            pi 无运行期装载扩展的 API）；
-          - `excludeTools`（已含形态基线）→ **至多一个** `-xt`，`tools` → **至多一个** `-t`：
-            两者在 pi 侧都是**赋值**语义（重复出现后者覆盖前者），拆开拼会解除基线屏蔽；
-          - `provider`（可空）→ `--provider`，`model` → `--model`，注入序固定 = provider 在前。
-        解析结果留在 `self.persona`（观测/诊断面复用，不重复解析）。"""
-        r = persona.resolve(
-            self.root,
-            form=persona.FORM_RESIDENT if self.resident else persona.FORM_TASK,
-            emit=log)
-        self.persona = r
-        self.cc_policy = r["contextCompaction"]
-        self.cc_ext = r["contextCompactionExt"]
-        argv = []
-        for part in r["appendParts"]:
-            argv += ["--append-system-prompt", part]
-        for sd in r["skillPaths"]:
-            argv += ["--skill", sd]
-        for ep in r["extensionPaths"]:
-            argv += ["-e", ep]
-        t_list, xt = r["tools"], r["excludeTools"]
-        if t_list:
-            # 白名单路径：排除集仍以单个 -xt 前置（赋值语义，拆开拼会解除基线屏蔽），再拼 -t
-            argv += (["-xt", ",".join(xt)] if xt else []) + ["-t", ",".join(t_list)]
-        elif xt:
-            argv += ["-xt", ",".join(xt)]
-        if r["model"] is not None:
-            if r["provider"] is not None:
-                argv += ["--provider", r["provider"]]
-            argv += ["--model", r["model"]]
-        return argv
+        **本文件不装配人格**：profile → caps → 注入面的解析在 `persona.py`（合并语义与全部
+        fail-soft 降级分支的单一实现），会话内注入在 `bots/extensions/profile-loader/index.ts`
+        （系统提示追加 / skill 路径 / 活动工具集 / 模型 / 压缩策略）。这里只负责让那个扩展在场，
+        以及把它需要的两个输入透传下去（都在 `os.environ` 里，`spawn_pi` 原样带过去）：
+          - `DISPATCH_PROFILE` = profile 名（单值；来自 spec.command 的 env 前缀，逐字不改）；
+          - `AGENTD_RESIDENT` = 形态（`1` = 常驻：不前置基线能力、不回落、不屏蔽 ask_user）。
+        两者皆缺时注入层按形态自行处置（任务形态回落 `executor` profile、常驻形态裸启动），
+        判据在解析层，不在此重复。
 
-    def _compaction_argv(self):
-        """profile `contextCompaction` 的执行体注入（**task 与 resident 两形态同等**：策略住 profile，
-        与形态无关）；注入位在能力（caps）之后（`-e` 是累加语义，顺序无副作用，但日志能看出来源）。
+        `-e` 的注入位还有第二重作用：pi 的扩展装载序是 **CLI `-e` 先于自动发现**
+        （dist/core/resource-loader.js 的 `mergePaths(cliEnabledExtensions, enabledExtensions)`）
+        ⇒ 注入层的 `before_agent_start` 先跑，人格正文落在其它全局扩展（如 host-info 的身份行）
+        的追加之前。本文件同时也在自动发现目录里（`~/.pi/agent/extensions/`，手工/交互会话免
+        `-e`），pi 按 realpath 去重 ⇒ 只装载一次（不会撞 flag 名）。
 
-        策略归一、执行体在场性判定与全部降级分支都在解析层（两者同进同退：`contextCompactionExt`
-        非空 ⇔ 策略合法 ∧ 执行体在场）；pi 对 `-e` 的加载错误是致命的，绝不指向不存在的路径。
-        注入时置 `cc_injected` ⇒ `spawn_pi` 才传 env `CONTEXT_COMPACTION_ENV`
-        （env 与 `-e` 同进同退：只传 env 无执行体 = 无人消费，只注执行体无 env = 扩展静默不启用）。
+        文件缺失 → WARN + 不注入（会话裸起、人格面缺席；口径同 `PROBE_EXT_REL`）。**绝不 die**：
+        本路径在所有会话 spawn 的公共路上，硬失败会自锁（连「修这条路径」的修复会话都起不来）。
         返回 `[]` ∨ `["-e", <绝对路径>]`。"""
-        p = self.cc_ext
-        if not p:
+        p = os.path.join(self.root, PROFILE_LOADER_EXT_REL)
+        if not os.path.isfile(p):
+            log("WARN: 人格注入层扩展缺失，跳过注入（会话照起但**人格面缺席**：无系统提示追加、"
+                "无能力捆绑 skill、工具面不收窄、model 不切换；取证 = 会话内 /persona）: %s", p)
             return []
-        self.cc_injected = True
+        self.loader_injected = True
+        log("人格注入层装载：%s（profile=%s，form=%s）", p,
+            os.environ.get("DISPATCH_PROFILE") or "（未设 → 解析层按形态处置）",
+            "resident" if self.resident else "task")
         return ["-e", p]
 
     def spawn_pi(self):
         self.clear_ready_marks()       # 陈旧标记不得骗开本代就绪门（先于 pi 启动）
         argv = self.build_argv()
         env = dict(os.environ, SESSIOND_SESSION_FILE=self.session_file)
-        if self.cc_injected:
-            # 归一化策略进 env（紧凑 JSON）；消费方 = bots/extensions/context-compaction/index.ts。
-            env[CONTEXT_COMPACTION_ENV] = json.dumps(
-                self.cc_policy, ensure_ascii=False, separators=(",", ":"))
-        else:
-            # 未注入执行体 ⇒ 显式洗掉可能从宿主继承的同名 env（否则一个陈旧值会让别处装载的
-            # 执行体误启用）：「无策略 = env 不在场」是硬语义，不靠调用方环境干净。
-            env.pop(CONTEXT_COMPACTION_ENV, None)
+        # 压缩策略的写者是人格注入层（它在会话内按 profile 的 `contextCompaction` 设这枚 env 并
+        # 装载执行体）⇒ 本层恒洗掉可能从宿主继承的陈旧值：「无策略 = env 不在场」是硬语义，
+        # 不靠调用方环境干净（否则一个陈旧值会让注入层装载的执行体误启用旧策略）。
+        env.pop(CONTEXT_COMPACTION_ENV, None)
         if self.child_recv_injected:
             # 就绪门信号通道（只任务形态：resident 不注入子端扩展，其主端 receiver 行为不变）。
             env["AGENTD_WRAP_INIT_OK"] = self.init_ok_file

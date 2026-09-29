@@ -37,6 +37,7 @@ def ok(name, cond, detail=""):
 
 # ---------- 夹具 ----------
 
+KB_INDEX_SRC = os.path.join(os.path.dirname(HERE), "bots", "kb_index.py")
 EXEC_TEXT = "# executor baseline\n\ntask persona\n"
 CAP_TEXT = "# reviewer persona\n\nbe strict\n"
 
@@ -99,6 +100,43 @@ class Tree:
         if extra:
             doc.update(extra)
         return _w(p, json.dumps(doc, ensure_ascii=False, indent=1))
+
+    def kb(self, dom_rel, docs, copy_tool=True):
+        """建知识域 `<root>/<dom_rel>/` 下逐篇 .md；docs = [(文件名, when ∨ None)]。
+        copy_tool=True 把**生产** bots/kb_index.py 拷进临时树（解析层按文件路径导入 ⇒
+        测的是真工具而非 mock）。返回域绝对路径。"""
+        if copy_tool:
+            d = os.path.join(self.root, "bots")
+            os.makedirs(d, exist_ok=True)
+            shutil.copy(KB_INDEX_SRC, os.path.join(d, "kb_index.py"))
+        ddir = os.path.join(self.root, dom_rel)
+        os.makedirs(ddir, exist_ok=True)
+        for fn, when in docs:
+            with open(os.path.join(ddir, fn), "w", encoding="utf-8") as f:
+                if when:
+                    f.write('---\nwhen: "%s"\n---\n\n# %s\n\n正文\n' % (when, fn))
+                else:
+                    f.write("# %s\n\n正文（未入册）\n" % fn)
+        return ddir
+
+    def lore_fixture(self, with_lore=True):
+        """lore 三面夹具（library 两层 + desk/journal + archive）；with_lore=False 只留工具。"""
+        self.kb(os.path.join("lore", "library", "dom", "facts"),
+                [("a.md", "册 A 何时读"), ("noWhen.md", None)], copy_tool=True)
+        if not with_lore:
+            shutil.rmtree(os.path.join(self.root, "lore"), ignore_errors=True)
+            return {}
+        self.kb(os.path.join("lore", "library", "dom", "cases"),
+                [("c.md", "案例 C 何时读")], copy_tool=False)
+        self.kb(os.path.join("lore", "desk", "me", "journal"), [("2026-09.md", None)],
+                copy_tool=False)
+        self.kb(os.path.join("lore", "desk", "me"), [("todo.md", None)], copy_tool=False)
+        self.kb(os.path.join("lore", "archive"), [("incidents-x.md", None)], copy_tool=False)
+        lore = os.path.join(self.root, "lore")
+        return {"lib": os.path.join(lore, "library", "dom"),
+                "journal": os.path.join(lore, "desk", "me", "journal"),
+                "desk": os.path.join(lore, "desk", "me"),
+                "archive": os.path.join(lore, "archive")}
 
     def resolve(self, form=persona.FORM_TASK, profile=None, env=None):
         saved = {k: os.environ.get(k) for k in ("DISPATCH_PROFILE",)}
@@ -542,10 +580,236 @@ def p13_real_assets():
        not bad, bad)
 
 
+
+
+# ---------- P14 knowledge 三档（真 kb_index，迁自 argv 形态的 T35/T28） ----------
+
+PT = "# domain persona\n"
+
+
+def p14_knowledge_tiers():
+    if not os.path.isfile(KB_INDEX_SRC):
+        ok("P14 生产 kb_index.py 不在本快照内 → 跳过", True)
+        return
+
+    def mk(tag, knowledge, with_lore=True, extra_dirs=()):
+        t = Tree(tag)
+        t.cap("mod", PT, cap_yml={"knowledge": list(knowledge)})
+        t.profile("mod", caps=["mod"], model="p/m")
+        d = t.lore_fixture(with_lore=with_lore)
+        for rel, docs in extra_dirs:
+            t.kb(rel, docs, copy_tool=False)
+        return t, d
+
+    # g) 三档各一节
+    t, d = mk("p14g", ["library/dom", "desk/me", "archive"])
+    try:
+        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        blk = r["appendParts"][1] if len(r["appendParts"]) == 2 else ""
+        ok("P14g 清单块顶在能力正文之后（末位）",
+           len(r["appendParts"]) == 2 and r["appendParts"][0] == PT, repr(r["appendParts"])[:200])
+        ok("P14g library 档 = 逐册 when 表且恒递归（facts 与 cases 两层都进表）",
+           "### 知识库 `library/dom`" in blk
+           and os.path.join(d["lib"], "facts", "a.md") in blk
+           and os.path.join(d["lib"], "cases", "c.md") in blk
+           and "册 A 何时读" in blk and "案例 C 何时读" in blk, blk[:600])
+        ok("P14g library 档未入册册不列", "noWhen.md" not in blk, blk[:400])
+        ok("P14g desk 档 = journal 一行检索入口（含 grep 与 git log -S 两种检索）",
+           "### 书桌 `desk/me`" in blk and d["journal"] in blk
+           and "grep -rn <关键词>" in blk and "log -S<关键词>" in blk, blk[:600])
+        ok("P14g desk 档不逐册列 journal、账本与自建工作文件不注入清单",
+           "2026-09.md" not in blk and "**不注入清单**" in blk and "todo.md" in blk, blk[:600])
+        ok("P14g archive 档 = 一行检索入口（不注入清单）",
+           "### 档案库 `archive`" in blk and d["archive"] in blk
+           and "incidents-x.md" not in blk and "incidents-" in blk, blk[:600])
+        ok("P14g 块头三句消费纪律在场",
+           all(x in blk for x in ("## 知识清单", "按需读取", "禁止预加载", "以权威为准")), blk[:300])
+        ok("P14g 解析摘要一行（lore 档按层计数、legacy 0 项）",
+           any("knowledge 名解析：lore 档 3 项（archive×1, desk×1, library×1），"
+               "legacy 工作区路径档 0 项" in l for l in t.lines),
+           json.dumps(t.lines, ensure_ascii=False)[-500:])
+        ok("P14g 块字符数进 stats", r["stats"]["knowledgeChars"] == len(blk), r["stats"])
+    finally:
+        t.cleanup()
+
+    # h) 名不可解析 ⇒ 一行降级说明进块（不静默）
+    t, d = mk("p14h", ["library/ghost", "desk/me"])
+    try:
+        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        blk = r["appendParts"][1] if len(r["appendParts"]) == 2 else ""
+        ok("P14h 名不可解析 ⇒ 块内一行降级说明 + 可解析面照常",
+           "不可解析" in blk and "library/ghost" in blk and "### 书桌 `desk/me`" in blk, blk[:400])
+    finally:
+        t.cleanup()
+
+    # i) lore 根不在场 ⇒ WARN 点名根因、解析不抛
+    t, d = mk("p14i", ["library/dom"], with_lore=False)
+    try:
+        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        blk = r["appendParts"][1] if len(r["appendParts"]) == 2 else ""
+        ok("P14i lore 根不在场 ⇒ WARN 点名根因 + 块内降级说明（不拖垮）",
+           any("lore 仓根不在场" in w for w in r["warnings"]) and "不可解析" in blk,
+           json.dumps(r["warnings"], ensure_ascii=False)[:400])
+        ok("P14i 解析摘要标出 lore 根不在场", any("不在场" in l for l in t.lines), t.lines[-2:])
+    finally:
+        t.cleanup()
+
+    # j) lore 名与 legacy 工作区路径混存
+    t, d = mk("p14j", ["library/dom", "kb/legacy"],
+              extra_dirs=[(os.path.join("kb", "legacy"), [("l.md", "legacy 册何时读")])])
+    try:
+        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        blk = r["appendParts"][1] if len(r["appendParts"]) == 2 else ""
+        ok("P14j 两档混存 ⇒ 各一节且顺序照声明（lore 档在前）",
+           "### 知识库 `library/dom`" in blk and blk.index("### 知识库") < blk.index("### 域 ")
+           and "legacy 册何时读" in blk, blk[:500])
+        ok("P14j legacy 档一条聚合 WARN + 解析摘要计数",
+           any("legacy 档" in w for w in r["warnings"])
+           and any("lore 档 1 项（library×1），legacy 工作区路径档 1 项" in l for l in t.lines),
+           json.dumps(r["warnings"], ensure_ascii=False)[:400])
+    finally:
+        t.cleanup()
+
+    # k) 名含 `..` ⇒ 拒绝、注入面只有能力正文
+    t, d = mk("p14k", ["../evil"])
+    try:
+        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        ok("P14k 名含 `..` ⇒ WARN 拒绝、注入面只有能力正文",
+           r["appendParts"] == [PT] and any("`..` 路径段" in w for w in r["warnings"]),
+           json.dumps(r["warnings"], ensure_ascii=False)[:300])
+    finally:
+        t.cleanup()
+
+    # l) 名表缓存损坏 ⇒ 注入面零影响（缓存与注入链路隔离）
+    for label, payload in (("损坏 JSON", "{not json"), ("口径版本不匹配", None)):
+        t, d = mk("p14l", ["library/dom", "desk/me", "archive"])
+        try:
+            cdir = os.path.join(t.root, "run", "kb-index")
+            os.makedirs(cdir, exist_ok=True)
+            if payload is None:
+                payload = json.dumps({"version": -1, "root": t.root, "docs": {}})
+            _w(os.path.join(cdir, "names.json"), payload)
+            r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+            blk = r["appendParts"][1] if len(r["appendParts"]) == 2 else ""
+            ok("P14l 名表缓存%s ⇒ 三档清单仍完整（注入链路不读缓存）" % label,
+               "### 知识库 `library/dom`" in blk and "### 书桌 `desk/me`" in blk
+               and "### 档案库 `archive`" in blk and os.path.join(d["lib"], "facts", "a.md") in blk,
+               blk[:400])
+        finally:
+            t.cleanup()
+
+    # m) kb 工具在场但 knowledge 字段缺失 ⇒ 注入面逐字不变（零回归出口）
+    t = Tree("p14m")
+    try:
+        t.cap("mod", PT, cap_yml={"summary": "no knowledge"})
+        t.profile("mod", caps=["mod"], model="p/m")
+        t.lore_fixture()
+        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        ok("P14m 无 knowledge 声明 ⇒ 只有能力正文、无清单相关日志/告警",
+           r["appendParts"] == [PT] and not any("knowledge" in l for l in t.lines),
+           json.dumps(t.lines, ensure_ascii=False)[:300])
+    finally:
+        t.cleanup()
+
+
+# ---------- P15 profile 直挂禁字段（迁自 T34） ----------
+
+def p15_profile_banned_fields():
+    t = Tree("p15")
+    try:
+        t.cap("executor", EXEC_TEXT)
+        t.profile("p", caps=["executor"], model="p/m", extra={
+            "skills": ["s"], "extensions": ["e"], "knowledge": ["library/x"],
+            "tools": ["read"], "excludeTools": ["bash"]})
+        r = t.resolve(profile="p")
+        ok("P15a 五个禁字段各一条 WARN（点名「profile 只列 caps」）",
+           sum(1 for w in r["warnings"] if "清单直挂" in w) == 5
+           and any("profile 只列 caps" in w for w in r["warnings"]),
+           json.dumps(r["warnings"], ensure_ascii=False)[:600])
+        ok("P15b 直挂字段一律不影响注入面（正文/工具面/skill 全按能力声明走）",
+           r["appendParts"] == [EXEC_TEXT] and r["tools"] == [] and r["skillPaths"] == []
+           and r["excludeTools"] == ["ask_user"],
+           json.dumps({k: r[k] for k in ("tools", "skillPaths", "excludeTools")}, ensure_ascii=False))
+        t.profile("q", raw="{not json")
+        rq = t.resolve(profile="q")
+        ok("P15c 清单损坏 ⇒ WARN 跳过、任务形态仍前置基线能力",
+           rq["appendParts"] == [EXEC_TEXT] and any("不可读/损坏" in w for w in rq["warnings"]),
+           rq["warnings"])
+        t.profile("r", raw="[1,2]")
+        rr = t.resolve(profile="r")
+        ok("P15d 清单顶层非对象 ⇒ WARN 跳过、基线能力照常",
+           rr["appendParts"] == [EXEC_TEXT] and any("顶层非对象" in w for w in rr["warnings"]),
+           rr["warnings"])
+    finally:
+        t.cleanup()
+
+
+# ---------- P16 能力声明面的降级分支（迁自 T32/T25a/T36 的资产面） ----------
+
+def p16_cap_degradation():
+    t = Tree("p16")
+    try:
+        t.cap("executor", EXEC_TEXT)
+        # ① 无 cap.yml = 纯正文能力
+        t.cap("plain", CAP_TEXT, cap_yml=None)
+        t.profile("p1", caps=["plain"], model="p/m")
+        r = t.resolve(profile="p1")
+        ok("P16a 无 cap.yml ⇒ WARN 点名「按纯正文能力处理」+ 正文照注",
+           r["appendParts"] == [EXEC_TEXT, CAP_TEXT]
+           and any("纯正文能力" in w for w in r["warnings"]), r["warnings"])
+        # ② cap.yml 损坏 ⇒ 跳过该能力（含正文）
+        t.cap("broken", CAP_TEXT, cap_yml="a: [1, 2\nb: }{")
+        t.profile("p2", caps=["broken"], model="p/m")
+        r2 = t.resolve(profile="p2")
+        ok("P16b cap.yml 解析失败 ⇒ 跳过该能力（含正文注入）+ WARN",
+           r2["appendParts"] == [EXEC_TEXT]
+           and any("解析失败" in w and "含正文注入" in w for w in r2["warnings"]),
+           json.dumps(r2["warnings"], ensure_ascii=False)[:400])
+        # ③ 顶层非 mapping
+        t.cap("seq", CAP_TEXT, cap_yml="- a\n- b\n")
+        t.profile("p3", caps=["seq"], model="p/m")
+        r3 = t.resolve(profile="p3")
+        ok("P16c cap.yml 顶层非 mapping ⇒ 跳过该能力 + WARN",
+           r3["appendParts"] == [EXEC_TEXT]
+           and any("顶层非 mapping" in w for w in r3["warnings"]), r3["warnings"])
+        # ④ bundle（无正文）是合法形态 ⇒ info 而非 WARN
+        t2 = Tree("p16d")
+        try:
+            t2.cap("executor", EXEC_TEXT)
+            t2.cap("kit", prompt_text=None, cap_yml={"summary": "bundle"})
+            t2.profile("p", caps=["kit"], model="p/m")
+            r4 = t2.resolve(profile="p")
+            ok("P16d bundle 是合法形态 ⇒ info 行、**不是** WARN",
+               any("bundle 能力" in l for l in t2.lines)
+               and not any("无 prompt.md" in w for w in r4["warnings"]),
+               json.dumps(r4["warnings"], ensure_ascii=False)[:300])
+        finally:
+            t2.cleanup()
+        # ⑤ 能力层禁键（caps / model / 未知键）⇒ WARN 忽略该键、不展开
+        t.cap("evil", CAP_TEXT, cap_yml={"caps": ["executor"], "model": "x/y", "nope": 1})
+        t.profile("p5", caps=["evil"], model="p/m")
+        r5 = t.resolve(profile="p5")
+        ok("P16e 能力层三个禁键各一条 WARN（点名合法键闭合集）且不生效",
+           sum(1 for w in r5["warnings"] if "非法键" in w) == 3
+           and any("能力不得引用能力" in w for w in r5["warnings"])
+           and r5["model"] == "p/m" and r5["caps"] == ["executor", "evil"],
+           json.dumps({"w": r5["warnings"], "model": r5["model"], "caps": r5["caps"]},
+                      ensure_ascii=False)[:600])
+        # ⑥ profile 无 model 字段 ⇒ 无 model、无 provider、不刷 model 相关 WARN
+        t.profile("p6", caps=["executor"])
+        r6 = t.resolve(profile="p6")
+        ok("P16f profile 无 model 字段 ⇒ model/provider 皆空且无相关 WARN",
+           r6["model"] is None and r6["provider"] is None
+           and not any("model" in w for w in r6["warnings"]), r6["warnings"])
+    finally:
+        t.cleanup()
+
+
 def main():
     for fn in (p1_contract, p2_caps, p2b_bundle_and_missing, p3_fallback, p4_knowledge,
                p5_tools, p6_bundles, p8_provider, p9_cc, p10_warnings, p11_equivalence,
-               p12_cli, p13_real_assets):
+               p12_cli, p13_real_assets, p14_knowledge_tiers,
+               p15_profile_banned_fields, p16_cap_degradation):
         print("---- %s" % fn.__name__)
         fn()
     print("==== persona 单测：%d passed, %d failed" % (PASS, FAIL))
