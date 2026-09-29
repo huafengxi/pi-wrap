@@ -1157,7 +1157,7 @@ def t42_resident_model_error_untouched():
 def t43_heartbeat_prompt_anchor_lines():
     """T43 定时触发面 prompt.md 的两个锚定行与 core.ts::buildPromptMd **同源**（防漂断言）。
 
-    定时触发面（`heartbeats/` 注册表 → `assistant/heartbeat/register.py`）登记的任务，其 prompt.md
+    定时触发面（`heartbeats/` 注册表 → 同目录 `register.py`）登记的任务，其 prompt.md
     由 registrar 自写、不经 `buildPromptMd`（agentctl 无 prompt 渲染动词），而 `caps/executor` 的
     「本次任务参数」锚定句（下文所有「任务目录」「本任务 taskId」均指该行）与「分级门禁」标记都要求
     这两行在 prompt **开头** ⇒ 缺行会让基线那两处引用对该形态悬空。
@@ -1166,7 +1166,7 @@ def t43_heartbeat_prompt_anchor_lines():
     （任一侧改名即红）；② 位置在开头（两行先于「## 需求描述」）；③ 路径按 portablePath 同款口径
     渲染（$HOME 内 → 波浪号）；④ 参数行点名执行机 env。
     """
-    reg_path = os.path.join(HERE, "..", "assistant", "heartbeat", "register.py")
+    reg_path = os.path.join(HERE, "..", "heartbeats", "register.py")
     core_path = os.path.join(HERE, "..", "assistant", ".pi", "extensions",
                              "agentd", "core.ts")
     with open(reg_path, encoding="utf-8") as f:
@@ -1180,7 +1180,7 @@ def t43_heartbeat_prompt_anchor_lines():
     seg = core[i:i + 6000]
     for t in tokens:
         ok("T43 core.ts::buildPromptMd 含 token %s" % t, t in seg,
-           "改名/删除 ⇒ 同批改 assistant/heartbeat/register.py 与本清单（否则该形态的锚定行会静默漂）")
+           "改名/删除 ⇒ 同批改 heartbeats/register.py 与本清单（否则该形态的锚定行会静默漂）")
 
     # register.py 侧：build_prompt 的函数体区间（parts 列表即 prompt 落盘顺序）
     j = reg.index("def build_prompt(")
@@ -1212,7 +1212,7 @@ def t45_retired_marker_zero_reflow():
     （agentd/agent-file-protocol.md）、人格例外句（caps/executor）。
       a) 洗刷名单不含该枚（名单是枚名制、只收在产标记：死键留着会让「名单 = 在产身份标记」失真）；
       b) 机制面零命中（core.ts / index.ts / envscrub.py / agent-file-protocol.md）；
-      c) 登记层与注册表零命中（assistant/heartbeat/**、heartbeats/**）；
+      c) 注册表与登记层零命中（heartbeats/**）；
       d) 人格面零命中（bots/caps/*/prompt.md）；
       e) registrar 的 spec.command 与 core.ts buildSpawnCommand 同形态（无 env 前缀）。
     豁免**行为**（残留 env 副本不放行、不装配主端）由 ext 套件 `agentd-ext.test.mjs` 的
@@ -1243,7 +1243,7 @@ def t45_retired_marker_zero_reflow():
            "命中 ⇒ 豁免面被加回（须同批改回叶子语义并扩 ext 套件断言）")
 
     # ---- c) 登记层与注册表 ----
-    for pat in (("assistant", "heartbeat"), ("heartbeats",)):
+    for pat in (("heartbeats",),):
         for root, _dirs, files in os.walk(os.path.join(ws, *pat)):
             for fn in sorted(files):
                 if not fn.endswith((".py", ".md", ".json")):
@@ -1266,7 +1266,7 @@ def t45_retired_marker_zero_reflow():
            "命中 ⇒ 人格面留了机制面已不成立的例外句（照条文办事的模型会去派任务并被 guard 拦）")
 
     # ---- e) spec.command 形态同源（无 env 前缀）----
-    reg = _read("assistant", "heartbeat", "register.py")
+    reg = _read("heartbeats", "register.py")
     core = _read("assistant", ".pi", "extensions", "agentd", "core.ts")
     m = (re.search(r"^COMMAND = '(.+)'", reg, re.M)
          or re.search(r'^COMMAND = "(.+)"', reg, re.M))
@@ -1354,7 +1354,7 @@ _CMD_PREFIX_SOURCES = (
     # (相对工作区根的 glob, 说明)。不在场 = 该源不在本快照内（w/ 整树 gitignored、pi-wrap
     # 单独 checkout）⇒ 显式记一条跳过，不静默、不当失败。
     ("bots/daemon/*/spec.json", "守护型/常驻 bot 的被追踪声明源"),
-    ("assistant/heartbeat/register.py", "定时触发面的登记脚本（spec.command 常量）"),
+    ("heartbeats/register.py", "定时触发面的登记脚本（spec.command 常量）"),
     ("w/ext/sessiond/proc.py", "create_bot 的 spec.command 模板"),
 )
 # `KEY=VAL KEY=VAL … exec|python3|bash` 形态的前缀键（值可含引号/`$`/`{}`）
