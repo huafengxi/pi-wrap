@@ -106,9 +106,10 @@ Assembly is **two layers**, and the merge semantics live in exactly one of them:
   `context-compaction` unit). It is auto-discovered from `~/.pi/agent/extensions/`,
   so a human can start a persona session with just `pi --persona <profile>`.
 
-**The wrapper therefore puts no persona data in argv any more** — no
-`--append-system-prompt`, no `--skill`, no `-t`/`-xt`, no `--model`/`--provider`.
-Its whole job for the persona face is two things (`_persona_ext_argv`):
+**The wrapper therefore puts no persona data in argv**: the prompt text, knowledge
+list, skill paths, tool sets, model and compaction policy are all injected
+in-session (the emission contract is pinned by `test_wrap.py` T48). Its whole job
+for the persona face is two things (`_persona_ext_argv`):
 
 1. pass `-e <profile-loader.ts>`. The file is auto-discovered anyway; the explicit
    `-e` **pins load order**, because pi loads CLI extensions before discovered ones
@@ -124,12 +125,12 @@ Its whole job for the persona face is two things (`_persona_ext_argv`):
    env absent" is a hard semantic that must not depend on a clean caller
    environment.
 
-Position note (a real difference from the retired argv form): `--append-system-prompt`
-landed in pi's dedicated slot, *before* `<project_context>` and the skills section,
-whereas `before_agent_start` only ever sees the finished prompt, so the persona is
-appended at its **end**. The appended bytes are identical (`appendJoiner` in
-`persona.py` is pi's own joiner for repeated append flags); only the position
-differs. Rebuilding the prompt to restore the old slot would need pi's private
+Position note: pi builds its system prompt with a dedicated append slot
+(`appendSystemPrompt` in `BuildSystemPromptOptions`) placed *before*
+`<project_context>` and the skills section, whereas `before_agent_start` only ever
+sees the **finished** prompt — so the persona now lands at its end. The appended
+bytes are identical (`appendJoiner` in `persona.py` is pi's own joiner for that
+slot); only the position differs. Restoring the old slot would need pi's private
 `buildSystemPrompt` (not in the package's public `exports`), so it is deliberately
 not done.
 

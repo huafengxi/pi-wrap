@@ -87,10 +87,6 @@ CC_FIELDS = ("enabled", "triggerTokens", "triggerRatio",
                                             # reserveTokens —— 不可达面（切点在 pi 的
                                             # prepareCompaction 内算定），见 cc_policy
 CC_INSTRUCTIONS_MAX = 2000                 # customInstructions 字符数上界（与 policy.ts 同口径）
-PROMPT_ARG_BYTES_WARN = 120 * 1024         # 单条追加正文的字节告警阈：内核单参数上限
-                                            # MAX_ARG_STRLEN（131072）留余量。**只对 argv 发射形态
-                                            # 有意义**（会话内注入不经 argv ⇒ 无此上界），故它是
-                                            # 告警不是拒绝，且真约束 = 上下文预算。
 
 # 形态基线排除集（安全面单调收紧、与 caps 序无关）：任务形态恒屏蔽 ask_user（反问走调度协议），
 # resident 形态为空（主端 ask_user 链路保留）。
@@ -496,9 +492,6 @@ class Resolver:
             try:
                 with open(pf, encoding="utf-8") as f:
                     text = f.read()
-                if len(text.encode("utf-8")) > PROMPT_ARG_BYTES_WARN:
-                    self.emit("WARN: 能力 %r prompt.md 超 120KB，可能触内核单参数上限（MAX_ARG_STRLEN），"
-                              "pi 可能启动失败", name)
                 unit["text"] = text
                 unit["chars"] = len(text)
             except OSError as e:
