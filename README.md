@@ -105,6 +105,10 @@ Assembly is **two layers**, and the merge semantics live in exactly one of them:
   (`setActiveTools`), model (`setModel`), compaction policy (env + loading the
   `context-compaction` unit). It is auto-discovered from `~/.pi/agent/extensions/`,
   so a human can start a persona session with just `pi --persona <profile>`.
+  The **form** still comes from `AGENTD_RESIDENT` (a fact about the session, not
+  part of the persona declaration), so a resident-shaped profile needs
+  `AGENTD_RESIDENT=1 pi --persona <profile>`; without it the task form applies
+  (executor baseline prepended, `ask_user` excluded).
 
 **The wrapper therefore puts no persona data in argv**: the prompt text, knowledge
 list, skill paths, tool sets, model and compaction policy are all injected
