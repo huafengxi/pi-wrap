@@ -70,14 +70,11 @@ if FLAG_DIR:
         pass
     # 就绪门 env 快照：断言 wrap 是否把两枚标记路径传给了 pi 侧
     # （任务形态传 / resident 不传 / receiver-child 缺失不传）。
-    # dispatch_heartbeat：心跳豁免不回归断言 —— spec.command 前缀注入的
-    # DISPATCH_HEARTBEAT 经 wrap（不洗刷）到达 pi 子进程 ⇒ 快照里必须仍在场。
     try:
         with open(os.path.join(FLAG_DIR, "gate_env"), "w") as f:
             f.write(json.dumps({
                 "init_ok": os.environ.get("AGENTD_WRAP_INIT_OK", ""),
                 "recv_armed": os.environ.get("AGENTD_WRAP_RECV_ARMED", ""),
-                "dispatch_heartbeat": os.environ.get("DISPATCH_HEARTBEAT", ""),
                 "mode": MODE}) + "\n")
     except OSError:
         pass

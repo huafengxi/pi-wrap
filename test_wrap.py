@@ -2861,21 +2861,22 @@ def t42_resident_model_error_untouched():
 
 
 def t43_heartbeat_prompt_anchor_lines():
-    """T43 心跳 prompt.md 的两个锚定行与 core.ts::buildPromptMd **同源**（防漂断言）。
+    """T43 定时触发面 prompt.md 的两个锚定行与 core.ts::buildPromptMd **同源**（防漂断言）。
 
-    心跳的 prompt.md 由 `assistant/heartbeat.sh` 自写、不经 `buildPromptMd`，而 `caps/executor`
-    的「本次任务参数」锚定句（下文所有「任务目录」「本任务 taskId」均指该行）与「分级门禁」标记
-    都要求这两行在 prompt **开头** ⇒ 缺行会让基线那两处引用对心跳形态悬空。
-    镜像允许（bash 侧无薄渲染入口：agentctl 无 prompt 渲染动词、python 重实现 = 第三份副本、
-    node 跑 TS = 给脚本加运行时依赖），但**没有断言的镜像**才是错 —— 漂移会在「executor 基线改了
-    锚定句措辞」那天静默发生。本用例钉三面：① token 集同源（任一侧改名即红）；② 位置在开头
-    （两行先于 REQUIREMENT 的 printf）；③ 路径按 portablePath 同款口径渲染（$HOME 内 → 波浪号）。
+    定时触发面（`heartbeats/` 注册表 → `assistant/heartbeat/register.py`）登记的任务，其 prompt.md
+    由 registrar 自写、不经 `buildPromptMd`（agentctl 无 prompt 渲染动词），而 `caps/executor` 的
+    「本次任务参数」锚定句（下文所有「任务目录」「本任务 taskId」均指该行）与「分级门禁」标记都要求
+    这两行在 prompt **开头** ⇒ 缺行会让基线那两处引用对该形态悬空。
+    镜像允许（python 重实现 = 第三份副本、node 跑 TS = 给脚本加运行时依赖），但**没有断言的镜像**
+    才是错 —— 漂移会在「executor 基线改了锚定句措辞」那天静默发生。本用例钉四面：① token 集同源
+    （任一侧改名即红）；② 位置在开头（两行先于「## 需求描述」）；③ 路径按 portablePath 同款口径
+    渲染（$HOME 内 → 波浪号）；④ 参数行点名执行机 env。
     """
-    hb_path = os.path.join(HERE, "..", "assistant", "heartbeat.sh")
+    reg_path = os.path.join(HERE, "..", "assistant", "heartbeat", "register.py")
     core_path = os.path.join(HERE, "..", "assistant", ".pi", "extensions",
                              "agentd", "core.ts")
-    with open(hb_path, encoding="utf-8") as f:
-        hb = f.read()
+    with open(reg_path, encoding="utf-8") as f:
+        reg = f.read()
     with open(core_path, encoding="utf-8") as f:
         core = f.read()
     tokens = ["任务分级", "【本次任务参数】", "taskId", "任务目录", "report.md"]
@@ -2885,25 +2886,25 @@ def t43_heartbeat_prompt_anchor_lines():
     seg = core[i:i + 6000]
     for t in tokens:
         ok("T43 core.ts::buildPromptMd 含 token %s" % t, t in seg,
-           "改名/删除 ⇒ 同批改 heartbeat.sh 与本清单（否则心跳形态的锚定行会静默漂）")
+           "改名/删除 ⇒ 同批改 assistant/heartbeat/register.py 与本清单（否则该形态的锚定行会静默漂）")
 
-    # heartbeat.sh 侧：prompt 落盘块（从 mkdir session/ 到重定向收尾）
-    j = hb.index('mkdir -p "$AGENT_DIR/session"')
-    k = hb.index('> "$AGENT_DIR/prompt.md"', j)
-    block = hb[j:k]
+    # register.py 侧：build_prompt 的函数体区间（parts 列表即 prompt 落盘顺序）
+    j = reg.index("def build_prompt(")
+    k = reg.index("\ndef ", j + 1)
+    block = reg[j:k]
     for t in tokens:
-        ok("T43 heartbeat.sh 的 prompt 块含 token %s（与 buildPromptMd 同源）" % t,
-           t in block, "块内缺该 token ⇒ 心跳任务的 prompt.md 少一个锚定字段")
+        ok("T43 register.py 的 build_prompt 含 token %s（与 buildPromptMd 同源）" % t,
+           t in block, "函数体内缺该 token ⇒ 该形态任务的 prompt.md 少一个锚定字段")
 
-    req = block.index('"$REQUIREMENT"')
-    ok("T43 分级行在 REQUIREMENT 之前（= prompt 开头）",
-       block.index("任务分级：S") < req, "caps/executor 的分级门禁按「任务头部」标记对号")
-    ok("T43 参数行在 REQUIREMENT 之前（= prompt 开头）",
-       block.index("【本次任务参数】") < req,
+    need = block.index('"## 需求描述"')
+    ok("T43 分级行在需求描述之前（= prompt 开头）",
+       block.index("任务分级") < need, "caps/executor 的分级门禁按「任务头部」标记对号")
+    ok("T43 参数行在需求描述之前（= prompt 开头）",
+       block.index("【本次任务参数】") < need,
        "caps/executor 逐字依赖「任务 prompt **开头**的『本次任务参数』行」")
     ok("T43 路径按 portablePath 同款口径（$HOME 内 → 波浪号形态）",
-       'AGENT_DIR_DISP="~${AGENT_DIR#"$HOME"}"' in block,
-       "跨机可移植面：心跳任务也可能 host≠登记机，绝对路径会给出不存在的登记机 home 前缀")
+       "portable(" in block and "def portable(" in reg,
+       "跨机可移植面：host≠登记机的件（如 host=mac 的产线件）拿到登记机绝对路径会不存在")
     ok("T43 参数行点名执行机 env $AGENT_HOME", "`$AGENT_HOME`" in block,
        "缺括注 ⇒ 执行者拿到波浪号路径却不知道权威现值在哪")
 
@@ -2987,60 +2988,78 @@ def t44_provider_injection():
             e.cleanup([p])
 
 
-def t45_heartbeat_env_scrub():
-    """T45 `DISPATCH_HEARTBEAT` 的洗刷面：心跳标记与 AGENTD_RESIDENT 同族
-    （只应来自 spec.command 前缀，登记方 = assistant/heartbeat.sh），未进洗刷名单时它被心跳
-    会话内每个孙进程继承 → 经 bash 工具 → `make` → `serviced/serviced.py` 带进被启动的服务；若那是
-    agentd，它 spawn 的每个任务都带上递归守卫豁免（守卫全网静默失效）。
-      a) 名单单点含该枚 + scrub_env 真洗掉（其余键逐字保留，不过杀）；
-      d) 心跳豁免不回归：按 spec.command 前缀形态（bash -c 'DISPATCH_HEARTBEAT=1 exec …'）
-         起进程 ⇒ pi 子进程 environ 里该标记仍在场（洗刷只断继承路径、不断显式声明路径）。"""
-    import envscrub
-    key = "DISPATCH_HEARTBEAT"
-    # ---- a) 名单单点 + 洗刷行为 ----
-    ok("T45a ENV_SCRUB_EXACT 含 DISPATCH_HEARTBEAT（名单单一事实源）",
-       key in envscrub.ENV_SCRUB_EXACT, sorted(envscrub.ENV_SCRUB_EXACT))
-    polluted = {key: "1", "AGENTD_RESIDENT": "1", "DISPATCH_PROFILE": "executor",
-                "AGENT_SELF": "task/outer", "PATH": "/usr/bin", "HOME": "/h",
-                "SOME_UNRELATED": "keep-me"}
-    scrubbed = envscrub.scrub_env(base=polluted)
-    ok("T45a scrub_env 洗掉该枚（继承链断开）", key not in scrubbed, sorted(scrubbed))
-    ok("T45a 非身份键逐字保留（不过杀）",
-       scrubbed.get("PATH") == "/usr/bin" and scrubbed.get("SOME_UNRELATED") == "keep-me",
-       sorted(scrubbed))
-    ok("T45a runner spawn 口径（strip_third_party=True）同样洗掉该枚",
-       key not in envscrub.scrub_env(base=polluted, strip_third_party=True))
+def t45_retired_marker_zero_reflow():
+    """T45 已退役的 `DISPATCH_HEARTBEAT` 标记零回流（提交期钉桩，纯读文件、不起子进程）。
 
-    # ---- d) 心跳豁免不回归：spec.command 前缀形态起进程 ⇒ pi 子进程 environ 仍带该标记 ----
-    e = Env("t45hb")
-    e.env.pop(key, None)          # 父 env 不带该枚（洗刷后形态）：只能由命令前缀注入
-    ok("T45d 夹具父 env 不含该枚（标记只能来自命令前缀，不靠继承）",
-       key not in e.env, sorted(k for k in e.env if k.startswith("DISPATCH")))
-    # 与 runner.spawn 同构：subprocess.Popen(["bash", "-c", spec.command], env=…)，
-    # spec.command = assistant/heartbeat.sh 登记的 `DISPATCH_HEARTBEAT=1 exec python3 <wrap>` 形态。
-    os.chmod(FAKEPI, 0o755)
-    spec_command = "%s=1 exec %s %s" % (key, sys.executable, WRAP)
-    p = subprocess.Popen(["bash", "-c", spec_command], env=e.env,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         start_new_session=True)
-    try:
-        ok("T45d sock 就位", e.wait_sock())
-        ok("T45d pi 子进程已启动（argv 快照在场）", e.wait_argv())
-        ge = None
-        gp = os.path.join(e.flags, "gate_env")
-        dl = time.time() + 15
-        while time.time() < dl and ge is None:
-            if os.path.exists(gp):
-                try:
-                    with open(gp) as f:
-                        ge = json.loads(f.read())
-                except ValueError:
-                    ge = None
-            time.sleep(0.05)
-        ok("T45d pi 子进程 environ 仍含 DISPATCH_HEARTBEAT=1（豁免路径不回归）",
-           ge is not None and ge.get("dispatch_heartbeat") == "1", repr(ge))
-    finally:
-        e.cleanup([p])
+    定时触发面改为「一枚 timer 一件事」后，它登记的任务是叶子（探针件只读、产线件只产自己那份产物），
+    该标记的全部消费面同批退役 = 递归守卫豁免（core.ts recursionGuardReason）、主端装配豁免
+    （index.ts task-gate）、`send_message` 让位判定、洗刷名单（agentd/envscrub.py）、协议惯例条
+    （agentd/agent-file-protocol.md）、人格例外句（caps/executor）。
+      a) 洗刷名单不含该枚（名单是枚名制、只收在产标记：死键留着会让「名单 = 在产身份标记」失真）；
+      b) 机制面零命中（core.ts / index.ts / envscrub.py / agent-file-protocol.md）；
+      c) 登记层与注册表零命中（assistant/heartbeat/**、heartbeats/**）；
+      d) 人格面零命中（bots/caps/*/prompt.md）；
+      e) registrar 的 spec.command 与 core.ts buildSpawnCommand 同形态（无 env 前缀）。
+    豁免**行为**（残留 env 副本不放行、不装配主端）由 ext 套件 `agentd-ext.test.mjs` 的
+    recursionGuardReason / task-gate / dispatch guard 三组钉住；本组只钉「文本零回流」。
+    """
+    import envscrub
+    ws = os.path.normpath(os.path.join(HERE, ".."))
+    key = "DISPATCH_HEARTBEAT"
+
+    def _read(*rel):
+        with open(os.path.join(ws, *rel), encoding="utf-8") as f:
+            return f.read()
+
+    # ---- a) 洗刷名单：只收在产标记 ----
+    ok("T45a ENV_SCRUB_EXACT 不含已退役标记（名单 = 在产身份标记）",
+       key not in envscrub.ENV_SCRUB_EXACT, sorted(envscrub.ENV_SCRUB_EXACT))
+    ok("T45a 在产的同族前缀标记仍在名单（不误杀）",
+       "AGENTD_RESIDENT" in envscrub.ENV_SCRUB_EXACT,
+       sorted(envscrub.ENV_SCRUB_EXACT))
+
+    # ---- b) 机制面 ----
+    for rel in (("assistant", ".pi", "extensions", "agentd", "core.ts"),
+                ("assistant", ".pi", "extensions", "agentd", "index.ts"),
+                ("agentd", "envscrub.py"),
+                ("agentd", "agent-file-protocol.md")):
+        txt = _read(*rel)
+        ok("T45b 机制面零命中 %s" % "/".join(rel), key not in txt,
+           "命中 ⇒ 豁免面被加回（须同批改回叶子语义并扩 ext 套件断言）")
+
+    # ---- c) 登记层与注册表 ----
+    for pat in (("assistant", "heartbeat"), ("heartbeats",)):
+        for root, _dirs, files in os.walk(os.path.join(ws, *pat)):
+            for fn in sorted(files):
+                if not fn.endswith((".py", ".md", ".json")):
+                    continue
+                fp = os.path.join(root, fn)
+                with open(fp, encoding="utf-8") as f:
+                    txt = f.read()
+                ok("T45c 登记层零命中 %s" % os.path.relpath(fp, ws), key not in txt,
+                   "命中 ⇒ 登记层重新声明了已退役的形态标记")
+
+    # ---- d) 人格面 ----
+    caps = os.path.join(ws, "bots", "caps")
+    for name in sorted(os.listdir(caps)):
+        pp = os.path.join(caps, name, "prompt.md")
+        if not os.path.isfile(pp):
+            continue
+        with open(pp, encoding="utf-8") as f:
+            txt = f.read()
+        ok("T45d 人格面零命中 caps/%s" % name, key not in txt,
+           "命中 ⇒ 人格面留了机制面已不成立的例外句（照条文办事的模型会去派任务并被 guard 拦）")
+
+    # ---- e) spec.command 形态同源（无 env 前缀）----
+    reg = _read("assistant", "heartbeat", "register.py")
+    core = _read("assistant", ".pi", "extensions", "agentd", "core.ts")
+    m = (re.search(r"^COMMAND = '(.+)'", reg, re.M)
+         or re.search(r'^COMMAND = "(.+)"', reg, re.M))
+    ok("T45e registrar 的 COMMAND 常量可解析", m is not None, reg[:200])
+    if m:
+        cmd = m.group(1)
+        ok("T45e spec.command 与 buildSpawnCommand 同形态（无 env 前缀）",
+           cmd in core and not re.match(r"^[A-Z][A-Z0-9_]*=", cmd), repr(cmd))
 
 
 def _stderr_after_kill(p, timeout=10):
@@ -3113,13 +3132,14 @@ def t46_resident_prompt_delivery():
 # spec.command 的 env 前缀是身份标记进入会话的**唯一合法通道**（runner 先洗刷、再由 bash -c
 # 执行命令串 ⇒ 前缀注入发生在洗刷之后）。因此每一枚前缀键都必须在洗刷名单里：漏列 ⇒ 它从该
 # 会话的每个孙进程继承下去（bash 工具 → make → serviced/serviced.py → 被启动的服务），形态 =
-# DISPATCH_HEARTBEAT 事故（若被启动的是 agentd，递归守卫全网静默失效）。本组 = **提交期钉桩**
+# 身份标记事故形态（若被启动的是 agentd，该标记的语义对它 spawn 的每个任务全网生效、无告警）。
+# 本组 = **提交期钉桩**
 # （零运行时守卫：名单是枚名制、同前缀族里住着配置旋钮 ⇒ 不能按前缀洗，见 envscrub.py）。
 _CMD_PREFIX_SOURCES = (
     # (相对工作区根的 glob, 说明)。不在场 = 该源不在本快照内（w/ 整树 gitignored、pi-wrap
     # 单独 checkout）⇒ 显式记一条跳过，不静默、不当失败。
     ("bots/daemon/*/spec.json", "守护型/常驻 bot 的被追踪声明源"),
-    ("assistant/heartbeat.sh", "心跳任务的登记脚本（spec.command heredoc）"),
+    ("assistant/heartbeat/register.py", "定时触发面的登记脚本（spec.command 常量）"),
     ("w/ext/sessiond/proc.py", "create_bot 的 spec.command 模板"),
 )
 # `KEY=VAL KEY=VAL … exec|python3|bash` 形态的前缀键（值可含引号/`$`/`{}`）
@@ -3154,9 +3174,8 @@ def t47_spec_command_env_scrub():
     if not found:
         ok("T47 三个声明源均不在本快照内 → 本组跳过（无断言可跑）", True)
         return
-    known = {"DISPATCH_PROFILE", "AGENTD_RESIDENT", "AGENTD_SESSION_NAME",
-             "DISPATCH_HEARTBEAT"}
-    ok("T47a 扫到已知四枚前缀键（正则未失配、非假绿）", known <= set(found),
+    known = {"DISPATCH_PROFILE", "AGENTD_RESIDENT", "AGENTD_SESSION_NAME"}
+    ok("T47a 扫到已知三枚前缀键（正则未失配、非假绿）", known <= set(found),
        sorted(found))
     for k in sorted(found):
         scrubbed = envscrub.scrub_env(base={k: "1", "PATH": "/usr/bin",
@@ -3193,7 +3212,7 @@ def main():
                t41_tail_unreadable_failsoft, t41b_tail_window_truncated,
                t42_resident_model_error_untouched,
                t43_heartbeat_prompt_anchor_lines,
-               t44_provider_injection, t45_heartbeat_env_scrub,
+               t44_provider_injection, t45_retired_marker_zero_reflow,
                t46_resident_prompt_delivery,
                t47_spec_command_env_scrub):
         print("---- %s" % fn.__name__)

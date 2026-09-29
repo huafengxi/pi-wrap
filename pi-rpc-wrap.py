@@ -304,8 +304,8 @@ class Wrap:
         self.home = os.environ.get("AGENT_HOME", "")
         self.root = os.environ.get("AGENT_ROOT", "")
         self.task_id = os.environ.get("AGENT_SELF", "")
-        # resident 模式（设计 §2.2）：标记与心跳 DISPATCH_HEARTBEAT=1
-        # 同款 = spec.command 内嵌 env 前缀，经 bash -c 天然注入，不依赖 runner 继承。
+        # resident 模式（设计 §2.2）：标记 = spec.command 内嵌 env 前缀，
+        # 经 bash -c 天然注入，不依赖 runner 继承（惯例 = agentd/agent-file-protocol.md）。
         self.resident = os.environ.get("AGENTD_RESIDENT") == "1"
         self.session_name = os.environ.get("AGENTD_SESSION_NAME", "")
         if not self.home or not self.root or not self.task_id \
@@ -1155,8 +1155,8 @@ class Wrap:
         pending|stop|length|toolUse|error|aborted|deferred（pi-ai/dist/types.d.ts 本体声明），
         "aborted"（取消/compaction 中止）纳入会造出取消场景的假阳性。
         resident 形态不经此闸（run() 里 resident 分支先返回：常驻会话无 report.md 交付语义）；
-        心跳任务**适用**此闸（它带 DISPATCH_HEARTBEAT=1 而不带 AGENTD_RESIDENT=1 ⇒ 走收敛分支；
-        登记方裁定为期望行为：心跳同样以 report.md 为完成要件，且 restartPolicy 非 auto 不会重启成风暴）。
+        定时触发面登记的任务**适用**此闸（它不带 AGENTD_RESIDENT=1 ⇒ 走收敛分支；
+        期望行为：它同样以 report.md 为完成要件，且 restartPolicy 非 auto 不会重启成风暴）。
         任何拿不到证据的形态（jsonl 缺失/不可解析/无 assistant 条目/stopReason 缺失或不是 error）
         ⇒ 行为与旧版逐字一致（返回 0）；整个闸外层 try/except ⇒ 本档自身出 bug 不得把正常任务判失败。
         """
