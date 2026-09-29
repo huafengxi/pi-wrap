@@ -13,9 +13,11 @@ exit code. That single invariant is what makes the whole system debuggable: no
 side channel, no state machine to query — read the exit code and the session's
 `report.md`.
 
-Python 3 stdlib only. The authoritative (Chinese) design notes are the module
-docstring of `pi-rpc-wrap.py`; this file is the entry point for a reader who found
-the repo first.
+Python 3 stdlib only, except `PyYAML` for reading capability declarations (absent
+⇒ the documented degrade path, never a hard failure). The authoritative (Chinese)
+design notes are the module docstrings of `pi-rpc-wrap.py` (lifecycle + argv
+emission) and `persona.py` (persona assembly); this file is the entry point for a
+reader who found the repo first.
 
 ## Why a wrapper at all
 
@@ -88,6 +90,20 @@ declares `knowledge` — a rendered knowledge list resolved by name through
 `prompt.md` in the participant directory is the initial nudge for a blank new
 generation (absent ⇒ bare start, which is a supported path).
 
+Assembly is **two layers**, and the merge semantics live in exactly one of them:
+
+- `persona.py` — the *resolution* layer: profile manifest → capabilities →
+  structured injection face (ordered prompt parts, skill paths, tool allow/deny
+  sets, model + derived provider, normalized compaction policy, warnings). Every
+  merge rule and every fail-soft degrade branch is here, and nowhere else. It is
+  also a CLI (`persona.py resolve --root … --form task|resident [--profile …]` →
+  one JSON object on stdout) so an in-session consumer can resolve the very same
+  structure without re-implementing it.
+- `pi-rpc-wrap.py` — the *emission* layer: a thin mapping from that structure onto
+  `pi` flags, one rule per flag semantic (`--append-system-prompt`/`--skill`/`-e`
+  accumulate; `-t`/`-xt` assign, so each appears at most once; `--provider`
+  precedes `--model`).
+
 ## Sibling repo dependency
 
 `proto.py` — the single source of the path/envelope/exit-code contract, mirrored by
@@ -99,7 +115,10 @@ duplicated: two copies of the protocol would drift.
 ## Tests
 
 ```bash
-python3 test_wrap.py          # 444 checks, ~90 s; no network, no real pi
+python3 test_persona.py       # resolution layer: output contract, merge semantics,
+                             # degrade matrix, CLI, cross-consumer equivalence
+python3 test_wrap.py          # emission + lifecycle: argv/env, handshake, convergence,
+                             # exit codes; no network, no real pi
 ```
 
 `fakepi_rpc.py` is the `pi --mode rpc` double: it speaks the same JSON-lines
@@ -117,6 +136,8 @@ works when both repos sit in the same parent directory).
 
 | File | Role |
 |---|---|
-| `pi-rpc-wrap.py` | the wrapper: spawn, socket passthrough, readiness handshake, convergence, model-error gate, resident mode |
+| `pi-rpc-wrap.py` | the wrapper: spawn, socket passthrough, readiness handshake, convergence, model-error gate, resident mode; argv emission for the assembled persona |
+| `persona.py` | persona assembly (resolution layer): profile/capabilities → structured injection face; also a CLI for in-session consumers |
 | `fakepi_rpc.py` | scriptable `pi --mode rpc` double for the tests |
-| `test_wrap.py` | the verification matrix (T1…T46: argv/env, injection, handshake, convergence, exit-code semantics, cross-file pins) |
+| `test_persona.py` | resolution-layer matrix (P1…P13: output contract, capability expansion, fallback, tool sets, bundles, model/provider, compaction policy, warnings, CLI) |
+| `test_wrap.py` | the verification matrix (T1…T47: argv/env, injection, handshake, convergence, exit-code semantics, cross-file pins) |

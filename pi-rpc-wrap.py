@@ -66,62 +66,18 @@ stdin，主线程只等 pi 退出）、argv 会话名钉死 $AGENTD_SESSION_NAME
 不写诊断不误报（崩溃自愈/换代归属 = runner restartPolicy=auto / control 三动作）。
 其余（socket 生命周期/.pid 伴生档/透传/小环）逐字复用。
 
-人格装配（两层模型 = 原子能力 CAP + profile；机制口径权威 = assistant/DISPATCH.md §3）：
-env DISPATCH_PROFILE=<profile 名>（**单值**；链式组合已退役不留兼容，能力组合住 profile 的 caps
-列表）→ 读薄清单 $AGENT_ROOT/bots/profiles/<名>.json（纯只读，一份资产可被任意多会话引用；字段
-只有 name/summary/notes/model/caps/contextCompaction，**不直挂**捆绑资产）→ 按 `caps` 列表序逐个展开原子能力
-$AGENT_ROOT/bots/caps/<能力>/：
-  - prompt.md → 一个 --append-system-prompt（**装配器不碰正文一个字节**：无 frontmatter 剥离、无改写；
-    多能力 = 多次追加，pi 原生追加语义；正文缺失 = bundle 能力，合法形态）；
-  - cap.yml（YAML，`yaml.safe_load`）= 装配声明：skills → 共享库 bots/skills/<名>/ 一级解析
-    （**不回落全局**）各一个 --skill；extensions → bots/extensions/<名>/（含 index.ts 则恰一个 -e，
-    否则直属每个 .ts 按名排序各一个 -e；依赖一律 .ts，jiti 刷不掉 .mjs ESM 缓存）；
-    knowledge（**lore 仓根下的名**，首段 = 层标识 library/desk/archive；工作区路径声明仍可解析
-    = legacy 档）跨能力并集去重保序；tools/excludeTools 见下。
-  - **任务形态恒前置 `executor` 能力**（装配器硬规则，防漏列）；resident 形态不前置。
-  - **任务形态未设 profile（∨ 名字非法 = 按未设处置）时回落 `executor` profile**（`model` 只住 profile ⇒
-    回落面就是任务形态的缺省模型角色档）；回落复用同一条解析路径，注入面与只前置基线能力逐字一致。
-    resident 形态不回落（argv 逐字不变）；显式设了合法 profile 名（哪怕清单缺失）也不回落。
-工具面并集语义：-xt = ∪(声明者 excludeTools) ∪ 形态基线（任务形态 = ask_user，resident 为空）；
--t = ∪(声明者 tools)；未声明者不参与合并。pi 的 excludeTools 在 tools 白名单**之后**生效 ⇒
-最终工具面 = （∪tools）−（∪excludeTools ∪ 基线）；被排除掉的白名单项 = WARN 不阻断。出参中
--xt 至多一个（排除集非空时恰一个）、-t 至多一个——pi 两者都是赋值语义（重复出现后者覆盖前者），
-拆开拼会解除基线屏蔽；-e/--skill 才是累加。model **只住 profile**（能力层无此字段：复用单元
-不该决定运行环境）→ 至多一个 --model，**并由其 provider 段派生至多一个 --provider**（形如
-<provider>/<id> 才派生；缺失/无斜杠/畸形 = 不注入 --provider、落回 settings 默认，判定单点
-provider_of_model；注入序固定 = --provider 在 --model 之前，两形态一致）；任务形态未设 profile
-时回落 `executor` profile ⇒ 任务缺省即带它的 model（回落面解析不到 model = WARN + 不注入，
-落回 settings 默认）。
-knowledge 名 → 装配时调 $AGENT_ROOT/bots/kb_index.py 按名解析并渲染「知识清单」块，以一个额外的
---append-system-prompt 追加在**全部能力正文之后**（与 skill 清单注入同构：清单进 prompt、内容按需
-read，消费纪律由块自带）；**注入档由名的首段决定**（library = 逐册 when 表、desk = journal 一行
-检索入口、archive = 一行检索入口）；名按 lore 根一级解析、**不回落**，解析不到 = 一行降级说明进块
-+ WARN（不静默）；**字段缺失 = argv 逐字不变**；kb_index 不可导入/渲染异常/lore 仓未克隆 = WARN
-跳过该块（不拖垮会话）。声明与注入形态的规范权威 = bots/README.md「知识库规范」，机制口径 =
-assistant/DISPATCH.md §3，lore 内容组织 = the workspace knowledge-base README §5。
-上下文压缩策略（profile 的 `contextCompaction`，与 `model` 同类的**运行环境/策略**字段，不是资产
-逃生口）：`model` 决定用哪个模型，本字段决定「上下文长到多少就触发 compaction」。pi 的 compaction
-阈值只住 settings（全局 `~/.pi/agent/settings.json` ∨ 项目级 `<cwd>/.pi/settings.json`），**无
-per-session 覆盖通道**（无 CLI flag、无 `PI_*` env 覆盖项、`ExtensionContext` 不暴露 settings），而
-项目级 settings = workdir 共享（多个 profile 共用同一 workdir）⇒ 做不到 per-profile。故装配面 =
-校验/归一该字段后注入 ① env `AGENTD_CONTEXT_COMPACTION=<紧凑 JSON>` ② 一个
-`-e $AGENT_ROOT/bots/extensions/context-compaction/index.ts`（扩展单元自建触发 + 对 pi 内建
-`threshold` 触发的 cancel，把触发点后移到本策略阈值；自建触发在 agent 空闲时兜现——`ctx.compact()`
-内部先 `abort()`，轮内调用会中止在飞 run）。**task 与 resident 两形态同等装配**（策略住
-profile，与形态无关），注入位在能力（caps）之后。字段缺失 = env 与 `-e` 两者都不注入（argv/env
-逐字不变）；字段非法 ∨ 扩展文件缺失 = WARN + 不注入（与 profile 缺失同口径的告警降级，不硬失败）。
-只控「何时触发/是否触发」，**不控「保留多少」**：pi 的 `keepRecentTokens`/`reserveTokens` 切点在
-`prepareCompaction(pathEntries, settings)` 内算定，扩展事件里改不动 ⇒ 本字段不支持这两个键（规范
-正文与理由 = bots/README.md「人格资产」节）。
-降级总原则（沿现状风格）：未设该 env → 任务形态回落 `executor` profile（注入面 = 基线能力，另取其
-model；回落面不可用则只注入基线能力、不注入 --model）、resident argv 逐字不变；profile 名
-非法（含 / \\ , 或以 . 开头）/清单缺失或损坏/能力目录缺失/cap.yml 不可解析/pyyaml 不可导入/
-contextCompaction 非法 = 告警跳过该层，不硬失败不拖垮会话；全无可注入 = 裸启动。不做继承（无
-extends）、能力不引用能力。
-协议层扩展（ask-user-child/message-child/探针）仍归调度层注入，与人格装配无关。
+人格装配 = **两层**：解析层 `persona.py`（同目录；profile/caps → 结构化注入面，合并语义与全部
+fail-soft 降级分支的单一实现）+ 本文件的 **argv 发射层**（`_profile_argv`/`_compaction_argv`：
+把结构映射成 pi 的 flag，只此一层薄映射，映射逐条对应 pi 的 flag 语义）。机制口径权威 =
+assistant/DISPATCH.md §3，装配面逐格全文 = assistant/docs/profile-assembly.md，资产形态与字段
+规范 = bots/README.md「人格资产」/「知识库规范」节，解析层的输入输出契约 = persona.py 模块头。
+本文件只保留发射层自身的三条 pi 侧事实（详见 `_profile_argv` docstring）：`-xt`/`-t` 是**赋值**
+语义（各至多一个，拆开拼会解除形态基线屏蔽）、`-e`/`--skill` 是**累加**语义、`--provider` 注入序
+在 `--model` 之前。协议层扩展（ask-user-child/message-child/receiver-child/探针）仍归调度层注入，
+与人格装配无关。
 
 失败域：观测面（accept/转发）异常只断观测不伤收敛主线；未捕获异常兜底写
-诊断后退出 1。除 pyyaml（cap.yml 解析，缺失即按上述降级分支处置）外仅使用 python3 标准库。
+诊断后退出 1。本文件只用 python3 标准库（解析层的 pyyaml 依赖与其降级分支见 persona.py）。
 """
 import atexit
 import json
@@ -180,118 +136,14 @@ CHILD_EXTS = (            # 子端扩展（相对 $AGENT_ROOT，与 core.ts 的 
 )
 PROBE_EXT_REL = "w/ext/sessiond/probe.ts"   # sessiond 探针：任务/常驻会话
                                             # 也注入，使 spec.json?v=chat 观测面 /inspect 可用
-KB_INDEX_REL = "bots/kb_index.py"           # lore 资产清单 + 全局名字索引工具：能力 cap.yml 的
-                                            # knowledge 名 → 「知识清单」注入块（三档渲染）
-CAPS_REL = "bots/caps"                      # 原子能力库：<名>/{cap.yml,prompt.md}（prompt.md 可缺省
-                                            # = bundle 能力，只有捆绑声明）
-PROFILES_REL = "bots/profiles"              # profile 薄清单：<名>.json（字段只有 name/summary/notes/
-                                            # model/caps/contextCompaction，不直挂捆绑资产）
-SKILLS_REL = "bots/skills"                  # skill 共享库：cap.yml 按名捆绑，一级解析、不回落全局
-EXTS_REL = "bots/extensions"                # 扩展共享库：一个名字 = 一个扩展单元，一律 .ts
-TASK_BASELINE_CAP = "executor"              # 任务形态恒前置的能力（装配器硬规则）；resident 不前置
-TASK_FALLBACK_PROFILE = "executor"          # 任务形态未设 DISPATCH_PROFILE（∨ 名字非法 = 按未设处置）时
-                                            # 回落的缺省 profile：`model` 只住 profile ⇒ 回落面即任务形态的
-                                            # 缺省模型角色档（resident 形态不回落；其 caps 就是基线能力本身
-                                            # ⇒ 注入面与回落前逐字一致）。fail-soft 见 _resolve_caps
-CAP_ALLOWED_FIELDS = frozenset({"summary", "skills", "extensions", "knowledge",
-                                "tools", "excludeTools"})   # cap.yml 合法键闭合集（禁 caps/model）
-PROFILE_BANNED_FIELDS = ("skills", "extensions", "knowledge", "tools",
-                         "excludeTools")    # profile 只列 caps，不给逃生口 ⇒ 直挂即 WARN 忽略。
-                                            # `contextCompaction` 属运行环境/策略类字段（与 model
-                                            # 同类），不在本名单里、也不构成资产直挂的逃生口
-CONTEXT_COMPACTION_ENV = "AGENTD_CONTEXT_COMPACTION"   # 归一化策略的注入通道（紧凑 JSON），消费方 =
-                                            # bots/extensions/context-compaction/index.ts
-CONTEXT_COMPACTION_EXT_REL = "bots/extensions/context-compaction/index.ts"   # 执行体（扩展单元）；
-                                            # 文件缺失 → WARN + 不注入（照 PROBE_EXT_REL 口径）
-CC_FIELDS = ("enabled", "triggerTokens", "triggerRatio",
-             "customInstructions")         # `contextCompaction` 键白名单（白名单外一律非法：拼错的
-                                            # 键被静默忽略会改变语义）。**不含** keepRecentTokens/
-                                            # reserveTokens —— 不可达面（切点在 pi 的
-                                            # prepareCompaction 内算定），见 _cc_policy
-CC_INSTRUCTIONS_MAX = 2000                 # customInstructions 字符数上界（与 policy.ts 同口径）
-
-
-def _cc_policy(raw):
-    """profile 的 `contextCompaction` 字段 → (归一化 dict ∨ None, 错误原因 ∨ None)。
-
-    判据表（单一事实源 = bots/README.md「人格资产」节；同口径的另两份实现 = lint 的 E16 与
-    扩展侧 `bots/extensions/context-compaction/policy.ts:parsePolicy`，三者必须同判：lint 通过的
-    资产一定被本装配器装配，lint 报 E16 的一定在这里 WARN 丢弃）：
-      - 顶层非对象 / 含白名单外的键 ⇒ 非法（整块丢弃，不「忽略未知键」）；
-      - `enabled` 非 bool（缺省 true）、`triggerTokens` 非正整数、`triggerRatio` 非 0<r<=1 的数、
-        `customInstructions` 非非空字符串 ∨ 超 CC_INSTRUCTIONS_MAX 字符 ⇒ 非法；
-      - `triggerTokens` 与 `triggerRatio` **至少给一个**，除非 `enabled` 为 false（关掉自动压缩时
-        允许只留 enabled:false；两者都给 = OR 语义 = 先到者触发，判定在扩展侧）。
-    归一化输出只含实际声明的键 + 恒含 `enabled`（紧凑 JSON 进 env，扩展侧再解析一次）。
-    """
-    if not isinstance(raw, dict):
-        return None, "顶层非对象（%s）" % type(raw).__name__
-    unknown = [k for k in raw if k not in CC_FIELDS]
-    if unknown:
-        return None, ("含白名单外的键 %s（合法键 = %s；keepRecentTokens/reserveTokens 属不可达面，"
-                      "不支持）" % (",".join(sorted(map(str, unknown))), "/".join(CC_FIELDS)))
-    out = {"enabled": True}
-    if "enabled" in raw:
-        if not isinstance(raw["enabled"], bool):
-            return None, "enabled 非布尔（%.40r）" % (raw["enabled"],)
-        out["enabled"] = raw["enabled"]
-    if "triggerTokens" in raw:
-        v = raw["triggerTokens"]
-        if isinstance(v, bool) or not isinstance(v, int) or v < 1:
-            return None, "triggerTokens 非正整数（%.40r）" % (v,)
-        out["triggerTokens"] = v
-    if "triggerRatio" in raw:
-        v = raw["triggerRatio"]
-        if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 < v <= 1:
-            return None, "triggerRatio 非 0<r<=1 的有限数（%.40r）" % (v,)
-        out["triggerRatio"] = v
-    if "customInstructions" in raw:
-        v = raw["customInstructions"]
-        if not isinstance(v, str) or not v.strip():
-            return None, "customInstructions 非非空字符串（%.40r）" % (v,)
-        if len(v) > CC_INSTRUCTIONS_MAX:
-            return None, ("customInstructions 超 %d 字符（实得 %d）"
-                          % (CC_INSTRUCTIONS_MAX, len(v)))
-        out["customInstructions"] = v
-    if out["enabled"] is not False and "triggerTokens" not in out \
-            and "triggerRatio" not in out:
-        return None, ("既无 triggerTokens 也无 triggerRatio（enabled 非 false 时至少给一个，"
-                      "否则策略无触发点）")
-    return out, None
-
-
-def provider_of_model(model):
-    """profile 的 `model` 值 → 其 provider 段（供 `--provider` 注入）∨ None（= 不注入）。
-
-    声明源只有既有的 profile `model` 字段（**不新增 profile 字段、不硬编码任何 provider 名**）：
-    形如 `<provider>/<id>`（含且只含一个 `/`、且 provider 段非空）时返回 provider 段；
-    其余一律返回 None ⇒ 调用方不拼 `--provider`，pi 落回 `settings.json` 的默认 provider。
-
-    **fail-soft 是硬要求**（与既有 `--model` 的降级口径同源）：本函数处在所有任务 spawn 的
-    公共路径上，任何畸形值都只降级、**绝不 die**（硬失败会自锁——连「修这条路径」的修复任务
-    都起不来）。畸形判定逐条：
-      - None / 非字符串 / 空白串 → None（无 model 声明，provider 无从派生）；
-      - 不含 `/`（如 `qwen3.8-max`）→ None（裸模型 id：pi 自己按 settings 默认 provider 解析）；
-      - `/` 前段为空（如 `/planner`）→ None（provider 段空 = 注入空值反而覆盖掉默认）；
-      - 含 ≥2 个 `/`（如 `a/b/c`）→ None（两段式不成立，**不猜切分点**：`--model` 仍原样注入，
-        由 pi 自行解析，装配器不做二次判断）。
-    返回的 provider 段已 strip（与 `model` 取值处的 strip 同口径）。
-
-    **写侧约束（只记边界、不加代码校验）**：profile 的 `model` 前段必须是 pi 已配置的 provider 名。
-    pi 的 `resolveCliModel`（`dist/core/model-resolver.js`）对显式 `--provider <未知>` 是**硬失败**
-    （返回 `Unknown provider "<x>"` 错误），而单独一个 `--model <未知>/<id>` 仍可能经 model id 字面
-    精确匹配解析成功 ⇒ 注入 `--provider` 会**窄化**该容错面（两者都给时 pi 剥掉 model 的 provider
-    前缀，不双重前缀）。现网无实例：各 profile 的 model 前段均为已配置 provider。**不做写侧校验**：
-    profile 是跳机同步面，校验会在同步时刻差上误拒，与本函数「只降级不 die」的口径相左。"""
-    if not isinstance(model, str):
-        return None
-    m = model.strip()
-    if not m or "/" not in m:
-        return None
-    if m.count("/") != 1:
-        return None                        # 畸形：多段，不猜切分点
-    prov = m.split("/", 1)[0].strip()
-    return prov or None                    # `/id` 形态：provider 段空 ⇒ 不注入
+# 人格装配的**解析层**（profile/caps → 结构化注入面）住在同目录的 `persona.py`：合并语义
+# （caps 展开序 / 工具面并集 / knowledge 并集 / model 派生 / contextCompaction 归一 / 降级矩阵）
+# 只有那一份实现，本文件是它的 **argv 发射层**（另一个消费者 = pi 侧注入适配器，经其 CLI）。
+# 常量与判据函数一律从解析层取用（不在此复制，复制即漂移）。
+import persona                                                # noqa: E402
+CONTEXT_COMPACTION_ENV = persona.CONTEXT_COMPACTION_ENV       # 归一化策略的注入通道（紧凑 JSON），
+                                                              # 消费方 = bots/extensions/context-compaction/index.ts
+provider_of_model = persona.provider_of_model                 # model → provider 段派生（判定单点在解析层）
 
 
 def log(fmt, *args):
@@ -332,11 +184,14 @@ class Wrap:
         self.init_ok_file = proto.task_ready_path(self.root, self.name, "init-ok")
         self.recv_armed_file = proto.task_ready_path(self.root, self.name, "recv-armed")
         self.child_recv_injected = False   # build_argv 是否真注入了 receiver-child.ts
-        # profile 的 `contextCompaction` 装配态（_resolve_caps 解析 → _compaction_argv 注入）：
-        # 前者 = 归一化策略 dict ∨ None（字段缺失/非法都是 None），后者 = 是否真拼了 `-e`
-        #（执行体缺失时 = False ⇒ spawn_pi 也不传 env，两者同进同退）。
+        # profile 的 `contextCompaction` 装配态（解析层 persona.resolve 给出 → _compaction_argv
+        # 注入）：cc_policy = 归一化策略 dict ∨ None（字段缺失/非法都是 None），cc_ext = 执行体绝对
+        # 路径 ∨ None（策略合法 ∧ 文件在场才非空），cc_injected = 是否真拼了 `-e`（False ⇒ spawn_pi
+        # 也不传 env，两者同进同退）。
         self.cc_policy = None
+        self.cc_ext = None       # 解析层给出的执行体绝对路径（策略合法 ∧ 文件在场才非空）
         self.cc_injected = False
+        self.persona = None      # 本次装配的解析结果（persona.resolve 的结构化注入面）
         self.stderr_log = os.path.join(
             os.path.dirname(self.sock_path), self.name + ".stderr.log")
         # 参数钩（仅可向下调；测试/应急用，生产不设）
@@ -494,81 +349,12 @@ class Wrap:
             else:
                 log("WARN: 子端扩展缺失，跳过注入: %s", p)
         argv += self._probe_ext_argv()
-        # 基线屏蔽项不单独拼 -xt：与能力声明的 excludeTools 并集为单个 -xt（pi 的 -xt 是
-        # 赋值、后者覆盖，拆开拼会解除基线屏蔽）；无声明时 _profile_argv 原样兜底拼回。
-        argv += self._profile_argv(xt_baseline=("ask_user",))
+        # 形态基线排除集（任务形态 = ask_user）由解析层并入 excludeTools，本层不重复声明。
+        argv += self._profile_argv()
         argv += self._compaction_argv()
         return argv
 
     # ---------- knowledge 知识清单注入（规范 bots/README.md「知识库规范」） ----------
-
-    def _kb_module(self):
-        """按文件路径导入 $AGENT_ROOT/bots/kb_index.py（模块名带点/不在 sys.path，走 importlib）。
-        结果缓存在实例上；不可导入（文件缺失/语法错/依赖缺失）→ WARN + None（知识清单不注入，
-        会话照常起——清单是增强面，不是启动必需）。"""
-        if hasattr(self, "_kb_mod"):
-            return self._kb_mod
-        self._kb_mod = None
-        p = os.path.join(self.root, KB_INDEX_REL)
-        if not os.path.isfile(p):
-            log("WARN: kb 索引工具缺失（%s），跳过 knowledge 清单注入", p)
-            return None
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("kb_index", p)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            self._kb_mod = mod
-        except Exception as e:            # 导入面任何异常都不该拖垮会话装配
-            log("WARN: kb 索引工具导入失败（%s）%r，跳过 knowledge 清单注入", p, e)
-        return self._kb_mod
-
-    def _knowledge_argv(self, entries):
-        """knowledge 名列表 → 一个 --append-system-prompt（渲染好的「知识清单」块）。
-        entries = 跨能力并集后的声明原样列表（**lore 仓根下的名** ∨ 工作区路径 = legacy 档），
-        名解析/分档/去重/清洗/渲染全部交 kb_index（判定单点，与 CLI/巡检同一套口径）；本函数只多记
-        一行解析摘要（lore 档按层计数 / legacy 档计数 / lore 根在场性），便于排障「清单为何少了某面」。
-        无有效名/渲染为空/异常 → ([], 0)：argv 逐字不变（字段缺失零回归的同一出口）。
-        返回 (argv, 块字符数)。"""
-        if not entries:
-            return [], 0
-        mod = self._kb_module()
-        if mod is None:
-            return [], 0
-        try:
-            warns = []
-            block = mod.knowledge_block(entries, root=self.root, warnings=warns)
-            for w in warns:
-                log("WARN: knowledge %s", w)
-            self._log_knowledge_resolve(mod, entries)
-        except Exception as e:
-            log("WARN: knowledge 清单渲染异常 %r，跳过注入（会话照常起）", e)
-            return [], 0
-        if not block.strip():
-            log("WARN: knowledge 声明 %d 项但无有效名（全部被拒/为空），跳过清单注入",
-                len(entries))
-            return [], 0
-        return ["--append-system-prompt", block], len(block)
-
-    def _log_knowledge_resolve(self, mod, entries):
-        """一行解析摘要（只进日志、不影响 argv）：lore 档按层计数 + legacy 档计数 + lore 根在场性。
-        本函数全程 try 包裹——日志面任何异常都不得伤装配主线。"""
-        try:
-            lore = mod.lore_root(self.root)
-            got = mod.normalize_domains(entries, self.root, None, lore)
-            tiers, legacy = {}, 0
-            for e in got:
-                if e.get("kind") == "lore":
-                    tiers[e.get("tier")] = tiers.get(e.get("tier"), 0) + 1
-                else:
-                    legacy += 1
-            log("knowledge 名解析：lore 档 %d 项%s，legacy 工作区路径档 %d 项（lore 根 %s）",
-                sum(tiers.values()),
-                "（%s）" % ", ".join("%s×%d" % (k, v) for k, v in sorted(tiers.items()))
-                if tiers else "",
-                legacy, lore if os.path.isdir(lore) else "%s 不在场" % lore)
-        except Exception as e:
-            log("WARN: knowledge 解析摘要计算异常 %r（不影响清单渲染）", e)
 
     def _probe_ext_argv(self):
         """sessiond 探针扩展注入（观测面 /inspect 支持）：文件缺失只告警不拖垮会话，
@@ -579,416 +365,64 @@ class Wrap:
         log("WARN: 探针扩展缺失，跳过注入（/inspect 不可用）: %s", p)
         return []
 
-    # ---------- 人格装配（两层模型：profile = 原子能力声明列表；机制口径 DISPATCH.md §3） ----------
+    # ---------- 人格装配的 argv 发射层（解析层单点 = persona.py；机制口径 DISPATCH.md §3） ----------
 
-    @staticmethod
-    def _profile_name(raw):
-        """`DISPATCH_PROFILE` = **单值 profile 名**（链式组合已退役、不留兼容：能力组合住 profile 的
-        `caps` 列表，注入序 = 列表序）。文法白名单：拒 `/`、`\\` 与前导 `.`（可能走出 profiles/；
-        主闸 = 登记侧 core.ts 白名单）；**含逗号 = 已退役的链式写法**（如旧 `executor,review`）⇒
-        WARN 点名成因后按未设处置（诊断价值：现网存量 spec.command 里可能还有旧链）。
-        返回名字 ∨ None。"""
-        n = (raw or "").strip()
-        if not n:
-            return None
-        if "," in n:
-            log("WARN: DISPATCH_PROFILE %r 含逗号 = 已退役的链式写法（现为单值 profile 名，"
-                "能力组合住 profile 清单的 caps 列表）→ 按未设处置", n)
-            return None
-        if "/" in n or "\\" in n or n.startswith("."):
-            log("WARN: DISPATCH_PROFILE 名字非法 %r（含 / 或 \\ 或以 . 开头），跳过", n)
-            return None
-        return n
+    def _profile_argv(self):
+        """把 `persona.resolve()` 的结构化注入面拼成 pi argv（任务/常驻两形态共用）。
 
-    def _load_profile_doc(self, name):
-        """读 profile 薄清单 `bots/profiles/<名>.json` → dict ∨ None。
-        缺失 / 不可读 / JSON 损坏 / 顶层非对象 = WARN + None（任务形态仍前置基线能力，
-        resident = 裸启动）。直挂捆绑字段（profile 只列 caps，不给逃生口）= WARN 忽略该字段。"""
-        pf = os.path.join(self.root, PROFILES_REL, name + ".json")
-        if not os.path.isfile(pf):
-            log("WARN: profile %r 不存在（%s），跳过（任务形态仍会前置基线能力；"
-                "resident 形态 = 裸启动）", name, pf)
-            return None
-        try:
-            with open(pf, encoding="utf-8") as f:
-                doc = json.load(f)
-        except (OSError, ValueError) as e:
-            log("WARN: profile %r 清单不可读/损坏 %r，跳过", name, e)
-            return None
-        if not isinstance(doc, dict):
-            log("WARN: profile %r 清单顶层非对象（%s），跳过", name, type(doc).__name__)
-            return None
-        for banned in PROFILE_BANNED_FIELDS:
-            if banned in doc:
-                log("WARN: profile %r 清单直挂 %r 字段（profile 只列 caps；捆绑资产住能力 cap.yml，"
-                    "要额外装就建一个 bundle 能力）→ 忽略该字段", name, banned)
-        return doc
-
-    def _resolve_caps(self):
-        """`DISPATCH_PROFILE` 单值 → (能力名有序列表, model ∨ None, profile 名 ∨ None)。
-        注入序 = profile 的 `caps` 列表序（平铺，能力不引用能力）；**任务形态恒前置 `executor` 能力**
-        （装配器硬规则承担，防漏列；resident 形态不前置）。`model` 只住 profile（能力层无此字段：
-        复用单元不该决定运行环境）。降级：caps 缺失/非数组/元素非法 → WARN 逐项跳过。
-        **任务形态未设 profile（∨ 名字非法 = 按未设处置）⇒ 回落 `TASK_FALLBACK_PROFILE`**：回落复用
-        **同一条**解析路径（清单读取 / caps 校验 / model 取值 / 基线前置去重全部照旧，不另写平行分支），
-        故回落后的 caps 与「只前置基线能力」逐字一致（回落 profile 的 caps 就是基线能力本身），
-        差别只是拿到它的 `model`。resident 形态**不回落**（argv 逐字不变）；显式设了合法 profile 名
-        （哪怕清单缺失）**也不回落**（名字合法 = 作者有指定意图，缺失属降级而非未设）。
-        返回 (能力名有序列表, model ∨ None, profile 名 ∨ None)——第三项 = 实际使用的 profile 名
-        （回落时即回落面），供调用方记日志，不重复走 `_profile_name`（否则同一枚非法值会刷两条 WARN）。"""
-        name = self._profile_name(os.environ.get("DISPATCH_PROFILE", ""))
-        fallback = False
-        if name is None and not self.resident:
-            # 任务形态的缺省模型角色档：`model` 只住 profile，未设 profile 就拿不到 ⇒ 回落
-            # `TASK_FALLBACK_PROFILE`。**fail-soft 是硬要求**：这条路径影响所有任务 spawn，回落面
-            # 缺失/不可解析/无 model/类型非法一律 WARN + 不注入 --model（落回 settings 默认），
-            # **绝不 die**——硬失败会自锁（连「修这条路径」的修复任务都起不来）。降级全靠下面
-            # 既有的 `_load_profile_doc` / model 类型分支承担，本处不重复实现。
-            name, fallback = TASK_FALLBACK_PROFILE, True
-        caps, model = [], None
-        if name:
-            doc = self._load_profile_doc(name)
-            if doc is not None:
-                raw = doc.get("caps")
-                if raw is None:
-                    log("WARN: profile %r 无 caps 字段（profile = 能力的有序声明列表）→ 无可注入能力",
-                        name)
-                elif not isinstance(raw, list):
-                    log("WARN: profile %r 的 caps 非数组 %r，跳过", name, raw)
-                else:
-                    for item in raw:
-                        if not isinstance(item, str) or not item.strip():
-                            log("WARN: profile %r 的 caps 含非字符串/空元素 %r，跳过", name, item)
-                            continue
-                        c = item.strip()
-                        if c in caps:
-                            log("WARN: profile %r 的 caps 能力名重复 %r，去重保序", name, c)
-                            continue
-                        caps.append(c)
-                m = doc.get("model")
-                if isinstance(m, str) and m.strip():
-                    model = m.strip()
-                elif m is not None:
-                    log("WARN: profile %r 的 model 字段非非空字符串，跳过 --model", name)
-                if "contextCompaction" in doc:
-                    pol, err = _cc_policy(doc.get("contextCompaction"))
-                    if pol is None:
-                        # 与「profile 缺失 = 告警降级不硬失败」同口径：会话照起，只是策略不生效
-                        #（压缩行为落回 pi 内建的 settings 阈值）。
-                        log("WARN: profile %r 的 contextCompaction 非法（%s）⇒ 不装配"
-                            "（不注入 %s 与 -e；会话照起，压缩行为落回 pi 内建 settings 阈值）",
-                            name, err, CONTEXT_COMPACTION_ENV)
-                    else:
-                        self.cc_policy = pol
-        if not self.resident:
-            if TASK_BASELINE_CAP in caps:
-                # 已列在首位 = 声明与硬规则一致（如 `executor` profile 自身），静默去重；
-                # 列在非首位 = 作者意图与「基线恒首」不一致（装配器会把它提到首位），值得告警。
-                if caps[0] != TASK_BASELINE_CAP:
-                    log("WARN: profile %r 的 caps 把 %r 列在非首位——任务形态由装配器恒前置该能力，"
-                        "已提到首位并去重", name, TASK_BASELINE_CAP)
-                caps = [c for c in caps if c != TASK_BASELINE_CAP]
-            caps = [TASK_BASELINE_CAP] + caps
-        if fallback:
-            # 回落一条日志（事后可从 run/logs/* 归因「这个任务的 --model 从哪来」）；拿不到 model
-            # 时升为 WARN（fail-soft 分支：不注入 --model、不硬失败）。
-            if model:
-                log("任务形态未设 DISPATCH_PROFILE → 回落 %r profile（缺省模型角色档）："
-                    "model=%s，caps=%s", name, model, ",".join(caps))
-            else:
-                log("WARN: 任务形态未设 DISPATCH_PROFILE → 回落 %r profile，但解析不到可用 model"
-                    "（清单缺失/损坏/无 model 字段/类型非法，成因见上方告警）⇒ 不注入 --model，"
-                    "落回 settings 默认（fail-soft：本路径影响所有任务 spawn，硬失败会自锁）", name)
-        return caps, model, name
-
-    def _yaml_module(self):
-        """惰性导入 `yaml`（cap.yml 解析；本脚本唯一的第三方依赖，四机实测可用且仓内已依赖）。
-        不可导入 → 每进程 WARN 一次并返回 None：调用方按「cap.yml 不可解析」处置（跳过该能力），
-        无 cap.yml 的纯正文能力照常注入 ⇒ 依赖缺失不拖垮会话。"""
-        if hasattr(self, "_yaml_mod"):
-            return self._yaml_mod
-        try:
-            import yaml
-            self._yaml_mod = yaml
-        except Exception as e:                # ImportError 及任何导入期异常
-            self._yaml_mod = None
-            log("WARN: pyyaml 不可导入 %r ⇒ 在场的能力声明 cap.yml 一律不可解析（对应能力被跳过；"
-                "无 cap.yml 的纯正文能力照常注入）", e)
-        return self._yaml_mod
-
-    def _load_cap_yml(self, cdir, name):
-        """读能力声明 `bots/caps/<名>/cap.yml` → (声明 dict, 是否跳过该能力)。
-        - 文件不存在 ⇒ ({}, False)：**纯正文能力**（只注入 prompt.md、无捆绑声明）+ WARN
-          （规范形态是 cap.yml 与 prompt.md 两文件在场）；
-        - 不可读 / YAML 解析失败 / 顶层非 mapping / yaml 不可用 ⇒ (None, True)：**跳过该能力（含正文）**
-          ——声明面不可信时注入半份资产更危险（工具面与捆绑都无法判定）；
-        - 非法键（`caps`/`model`/未知键）⇒ WARN 忽略该键（能力不得引用能力；model 只住 profile）。"""
-        yf = os.path.join(cdir, "cap.yml")
-        if not os.path.isfile(yf):
-            log("WARN: 能力 %r 无 cap.yml（%s）→ 按纯正文能力处理（无捆绑声明）", name, yf)
-            return {}, False
-        yaml = self._yaml_module()
-        if yaml is None:
-            return None, True
-        try:
-            with open(yf, encoding="utf-8") as f:
-                doc = yaml.safe_load(f)
-        except Exception as e:               # OSError / yaml.YAMLError 及解析期任何异常
-            log("WARN: 能力 %r cap.yml 不可读/解析失败 %r → 跳过该能力（含正文注入）", name, e)
-            return None, True
-        if doc is None:
-            doc = {}                         # 空文件 = 空声明（合法）
-        if not isinstance(doc, dict):
-            log("WARN: 能力 %r cap.yml 顶层非 mapping（%s）→ 跳过该能力", name, type(doc).__name__)
-            return None, True
-        for k in list(doc.keys()):
-            if k not in CAP_ALLOWED_FIELDS:
-                log("WARN: 能力 %r cap.yml 含非法键 %r（合法键 = %s；能力不得引用能力、model 只住 "
-                    "profile）→ 忽略该键", name, k, "/".join(sorted(CAP_ALLOWED_FIELDS)))
-                doc.pop(k)
-        return doc, False
-
-    @staticmethod
-    def _name_list(v, field, cap):
-        """cap.yml 名单字段清洗（`skills`/`extensions`/`knowledge` 共用）：非数组 → WARN + 空；
-        非字符串/空白元素 → WARN 跳过；`skills`/`extensions` 的名另拒路径分隔与前导点
-        （防走出共享库一级）；`knowledge` 是 **lore 仓根下的名**（`library/<域>` ∨ `desk/<岗位>` ∨
-        `archive`，首段即层标识）∨ 工作区路径（legacy 档），故允许 `/`（`..` 段由 kb_index 拒）。"""
-        if v is None:
-            return []
-        if not isinstance(v, list):
-            log("WARN: 能力 %r cap.yml 的 %s 字段非数组 %r，跳过", cap, field, v)
-            return []
-        out = []
-        for item in v:
-            if field == "knowledge" and isinstance(item, dict):
-                log("WARN: 能力 %r cap.yml 的 knowledge 项为对象形态 %r：域级用途字段已退休，"
-                    "声明只收路径字符串（如 assistant/docs）→ 跳过该项", cap, item)
-                continue
-            if not isinstance(item, str) or not item.strip():
-                log("WARN: 能力 %r cap.yml 的 %s 含非字符串/空元素 %r，跳过", cap, field, item)
-                continue
-            n = item.strip()
-            if field != "knowledge" and ("/" in n or "\\" in n or n.startswith(".")):
-                log("WARN: 能力 %r cap.yml 的 %s 名 %r 非法（含 / 或 \\ 或以 . 开头），跳过",
-                    cap, field, n)
-                continue
-            out.append(n)
-        return out
-
-    def _skill_bundle_argv(self, names, cap, stats):
-        """cap.yml 的 `skills` → 共享库 `bots/skills/<名>/` **一级解析（不回落全局**：全局层本来就
-        必装，回落无意义），按声明序各一个 `--skill <绝对路径>`（与全局 skills 叠加，pi 原生累加语义）；
-        目录缺失 → WARN 跳过该项（找不到 = 告警跳过，不硬失败）。"""
+        **本函数不含任何合并/降级判据**——caps 展开序、任务形态基线前置与回落、工具面并集
+        （含形态基线排除集）、knowledge 清单渲染、model→provider 派生、contextCompaction 归一
+        与全部 fail-soft 分支都在解析层（`persona.py`，机制口径 = `assistant/DISPATCH.md` §3、
+        字段规范 = `bots/README.md`「人格资产」节）。这里的映射只有一层，逐条对应 pi 的 flag 语义：
+          - `appendParts`（逐能力 prompt.md 全文 + 末位知识清单块，按注入序）→ 每项一个
+            `--append-system-prompt`（pi 对多值是**追加**语义，按序以 `appendJoiner` 拼接）；
+          - `skillPaths` → 各一个 `--skill`（pi 累加语义，与全局 skills 叠加）；
+          - `extensionPaths` → 各一个 `-e`（pi 累加语义；能力捆绑扩展只有 argv 形态能兑现——
+            pi 无运行期装载扩展的 API）；
+          - `excludeTools`（已含形态基线）→ **至多一个** `-xt`，`tools` → **至多一个** `-t`：
+            两者在 pi 侧都是**赋值**语义（重复出现后者覆盖前者），拆开拼会解除基线屏蔽；
+          - `provider`（可空）→ `--provider`，`model` → `--model`，注入序固定 = provider 在前。
+        解析结果留在 `self.persona`（观测/诊断面复用，不重复解析）。"""
+        r = persona.resolve(
+            self.root,
+            form=persona.FORM_RESIDENT if self.resident else persona.FORM_TASK,
+            emit=log)
+        self.persona = r
+        self.cc_policy = r["contextCompaction"]
+        self.cc_ext = r["contextCompactionExt"]
         argv = []
-        for item in self._name_list(names, "skills", cap):
-            sd = os.path.join(self.root, SKILLS_REL, item)
-            if not os.path.isdir(sd):
-                log("WARN: 能力 %r 捆绑的 skill %r 不存在（%s），跳过（只解析 bots/skills/ 一级、"
-                    "不回落全局）", cap, item, sd)
-                continue
-            if not os.path.isfile(os.path.join(sd, "SKILL.md")):
-                log("WARN: 能力 %r 捆绑的 skill %r 缺 SKILL.md（%s），仍按目录注入 --skill"
-                    "（pi 侧自行忽略）", cap, item, sd)
+        for part in r["appendParts"]:
+            argv += ["--append-system-prompt", part]
+        for sd in r["skillPaths"]:
             argv += ["--skill", sd]
-            stats["skills"] += 1
-        return argv
-
-    def _ext_bundle_argv(self, names, cap, stats):
-        """cap.yml 的 `extensions` → 共享库 `bots/extensions/<名>/`（一个名字 = 一个扩展单元），
-        按声明序注入；单元解析见 `_ext_unit_argv`；目录缺失/无可注入 .ts → WARN 跳过该项。"""
-        argv = []
-        for item in self._name_list(names, "extensions", cap):
-            ed = os.path.join(self.root, EXTS_REL, item)
-            if not os.path.isdir(ed):
-                log("WARN: 能力 %r 捆绑的扩展 %r 不存在（%s），跳过", cap, item, ed)
-                continue
-            unit, n = self._ext_unit_argv(ed, item)
-            if not n:
-                log("WARN: 能力 %r 捆绑的扩展 %r 无可注入 .ts（%s），跳过", cap, item, ed)
-            argv += unit
-            stats["exts"] += n
-        return argv
-
-    @staticmethod
-    def _ext_unit_argv(edir, name):
-        """共享库扩展单元 `bots/extensions/<名>/` → `-e`：含 `index.ts` → 恰一个 `-e <dir>/index.ts`；
-        否则直属每个 `.ts`（按名排序保确定性）各一个 `-e`；非 .ts 文件 → WARN 跳过（dot 开头静默跳过、
-        子目录不递归）。依赖一律 `.ts`（jiti 刷不掉 .mjs ESM 缓存）。返回 (argv, 计数)。"""
-        idx = os.path.join(edir, "index.ts")
-        if os.path.isfile(idx):
-            return ["-e", idx], 1
-        argv = []
-        try:
-            entries = sorted(os.listdir(edir))
-        except OSError:
-            return [], 0
-        for entry in entries:
-            if entry.startswith("."):
-                continue
-            ep = os.path.join(edir, entry)
-            if not os.path.isfile(ep):
-                continue                     # 子目录不递归（单元形态 = index.ts ∨ 直属 .ts）
-            if entry.endswith(".ts"):
-                argv += ["-e", ep]
-            else:
-                log("WARN: 扩展 %r 内非 .ts 文件，跳过: %s", name, ep)
-        return argv, len(argv) // 2
-
-    def _cap_argv(self, name):
-        """单个原子能力的注入（`caps` 列表序逐个调用）：
-          - `prompt.md` → 一个 `--append-system-prompt`（**装配器不碰正文一个字节**：无 frontmatter
-            剥离、无改写；多能力 = 多次追加，pi 原生追加语义；超 120KB 告警 = 内核单参数上限
-            MAX_ARG_STRLEN，能力化后该约束退化为「单能力正文上界」）；正文缺失 = **bundle 能力**
-            （只有捆绑声明，合法形态、非缺陷 ⇒ info 日志不 WARN）；
-          - `cap.yml` 的 skills/extensions → 共享库一级解析（`_skill_bundle_argv`/`_ext_bundle_argv`）。
-        返回 (argv, 统计 dict, 声明 dict)；声明为 None = 该能力被跳过（目录缺失/cap.yml 不可信）。"""
-        cdir = os.path.join(self.root, CAPS_REL, name)
-        if not os.path.isdir(cdir):
-            log("WARN: 能力 %r 不存在（%s），跳过该能力（其余照常注入，不拖垮会话）", name, cdir)
-            return [], None, None
-        decl, skip = self._load_cap_yml(cdir, name)
-        if skip:
-            return [], None, None
-        argv = []
-        stats = {"prompt_chars": 0, "skills": 0, "exts": 0}
-        pf = os.path.join(cdir, "prompt.md")
-        if os.path.isfile(pf):
-            try:
-                with open(pf, encoding="utf-8") as f:
-                    text = f.read()
-                if len(text.encode("utf-8")) > 120 * 1024:
-                    log("WARN: 能力 %r prompt.md 超 120KB，可能触内核单参数上限（MAX_ARG_STRLEN），"
-                        "pi 可能启动失败", name)
-                argv += ["--append-system-prompt", text]
-                stats["prompt_chars"] = len(text)
-            except OSError as e:
-                log("WARN: 能力 %r prompt.md 不可读 %r，跳过正文注入", name, e)
-        else:
-            log("能力 %r 无 prompt.md = bundle 能力（只捆绑资产、无注入正文）", name)
-        argv += self._skill_bundle_argv(decl.get("skills"), name, stats)
-        argv += self._ext_bundle_argv(decl.get("extensions"), name, stats)
-        return argv, stats, decl
-
-    def _compaction_argv(self):
-        """profile `contextCompaction` 的执行体注入（**task 与 resident 两形态同等**：策略住 profile，
-        与形态无关）；注入位在能力（caps）之后（`-e` 是累加语义，顺序无副作用，但日志能看出来源）。
-
-        两个前置缺一就不注入（与「profile 缺失 = 告警降级不硬失败」同口径）：
-          ① `_resolve_caps` 解到合法策略（字段缺失/非法 ⇒ `self.cc_policy` 为 None）；
-          ② 执行体文件在场（缺失 ⇒ WARN + 不注入，照 `PROBE_EXT_REL` 口径；pi 对 `-e` 的加载错误
-             是致命的，绝不指向不存在的路径）。
-        注入时置 `cc_injected` ⇒ `spawn_pi` 才传 env `AGENTD_CONTEXT_COMPACTION`
-        （env 与 `-e` 同进同退：只传 env 无执行体 = 无人消费，只注执行体无 env = 扩展静默不启用）。
-        返回 `[]` ∨ `["-e", <绝对路径>]`。"""
-        pol = self.cc_policy
-        if not pol:
-            return []
-        p = os.path.join(self.root, CONTEXT_COMPACTION_EXT_REL)
-        if not os.path.isfile(p):
-            log("WARN: contextCompaction 执行体缺失，跳过注入（策略已声明但装配不上；"
-                "会话照起，压缩行为落回 pi 内建 settings 阈值）: %s", p)
-            return []
-        self.cc_injected = True
-        log("contextCompaction 装配：trigger=%s ratio=%s enabled=%s ext=%s",
-            pol.get("triggerTokens", "（未设）"), pol.get("triggerRatio", "（未设）"),
-            pol.get("enabled", True), p)
-        return ["-e", p]
-
-    def _profile_argv(self, xt_baseline=()):
-        """人格装配注入单点（任务/常驻两形态共用；机制口径 = `assistant/DISPATCH.md` §3）：
-        `DISPATCH_PROFILE=<profile 名>`（**单值**）→ 薄清单 `bots/profiles/<名>.json` 的 `caps`
-        → 逐能力读 `bots/caps/<能力>/{cap.yml,prompt.md}`（`_resolve_caps`/`_cap_argv`）：
-          - 注入序 = `caps` 列表序；**任务形态恒前置 `executor` 能力**（装配器硬规则），resident 不前置；
-          - `knowledge`（lore 仓根下的名，首段 = 层标识）跨能力**并集去重保序** → 一个
-            `--append-system-prompt` 的「知识清单」块，追加在**全部能力正文之后**（名解析与三档渲染交
-            `bots/kb_index.py`，判定单点；工作区路径声明 = legacy 档，渲染形态不变）；
-          - `model` **只来自 profile** → 至多一个 `--model`，**并由其 provider 段派生至多一个
-            `--provider`**（`<provider>/<id>` 形式才派生；缺失/无斜杠/畸形 = 不注入 `--provider`、
-            落回 settings 默认，判定与 fail-soft 口径见 `provider_of_model`）。注入序固定 =
-            **`--provider` 在 `--model` 之前**（两形态一致）；**任务形态未设 profile 时回落 `executor`
-            profile**（⇒ 任务缺省即带它的 model；回落面解析不到 model = WARN + 不注入，绝不硬失败）；
-          - **工具面并集语义**：`-xt` = ∪(声明者 excludeTools) ∪ 形态基线；`-t` = ∪(声明者 tools)；
-            未声明者不参与合并（无声明者 = 不发 `-t`）。pi 的 excludeTools 在 tools 白名单**之后**生效
-            ⇒ 最终工具面 = （∪tools）−（∪excludeTools ∪ 基线）；被排除掉的白名单项 = WARN 不阻断。
-            出参中 `-xt` 至多一个（排除集非空时**恰一个**）、`-t` 至多一个——pi 两者都是赋值语义
-            （重复出现后者覆盖前者），拆开拼会解除基线屏蔽；`-e`/`--skill` 才是累加。
-        xt_baseline = 形态基线排除集（任务形态 = ("ask_user",)，resident 形态传空）。
-        未设 env → 任务形态回落 `executor` profile（注入面 = 基线能力，另取其 model）、resident argv
-        逐字不变（零回归出口）；profile/能力缺失或损坏 → 告警跳过（降级分支全集见各
-        `_load_*`/`_cap_argv` docstring），全无可注入 = 裸启动，
-        绝不硬失败。责任口径（白名单模式需自行列全，含调度协议工具）见 DISPATCH.md §3。"""
-        xt = list(dict.fromkeys(xt_baseline))
-        caps, model_used, pname = self._resolve_caps()
-        if not caps:
-            return ["-xt", ",".join(xt)] if xt else []
-        argv = []
-        kb_entries = []      # knowledge 名跨能力累积（并集；去重保序、名解析与分档渲染交 kb_index）
-        t_list, xt_decl = [], []
-        for name in caps:
-            c_argv, stats, decl = self._cap_argv(name)
-            if decl is None:
-                continue                     # 该能力被跳过（目录缺失/cap.yml 不可信），其余照常
-            argv += c_argv
-            kb_entries += self._name_list(decl.get("knowledge"), "knowledge", name)
-            t_list += self._tool_list(decl, "tools", name)
-            xt_decl += self._tool_list(decl, "excludeTools", name)
-            log("能力 %r 注入：prompt=%d 字符，skills=%d，extensions=%d",
-                name, stats["prompt_chars"], stats["skills"], stats["exts"])
-        # 工具面并集（去重保序）；排除集 = 声明者并集 ∪ 形态基线（安全面单调收紧、与 caps 序无关）
-        t_list = list(dict.fromkeys(t_list))
-        xt = list(dict.fromkeys(xt + xt_decl))
-        killed = [t for t in t_list if t in set(xt)]
-        if killed:
-            log("WARN: 工具面白名单项 %s 被排除集命中（∪excludeTools ∪ 形态基线）⇒ 最终不生效"
-                "（pi 的 excludeTools 在 tools 白名单之后生效）；可见即可，不阻断", ",".join(killed))
-        # knowledge 清单：追加在全部能力正文之后（--append-system-prompt 顺序即拼接顺序）
-        kb_argv, kb_chars = self._knowledge_argv(kb_entries)
-        argv += kb_argv
-        if kb_argv:
-            log("knowledge 清单注入：%d 项声明，%d 字符", len(kb_entries), kb_chars)
-        if model_used is not None:
-            # provider 段派生（声明源 = 同一个 profile `model` 字段，不另设字段）：畸形/无斜杠
-            # ⇒ provider 为 None ⇒ 只注入 --model（fail-soft，绝不 die；判定见 provider_of_model）
-            prov = provider_of_model(model_used)
-            if prov is not None:
-                argv += ["--provider", prov]
-            argv += ["--model", model_used]
+        for ep in r["extensionPaths"]:
+            argv += ["-e", ep]
+        t_list, xt = r["tools"], r["excludeTools"]
         if t_list:
             # 白名单路径：排除集仍以单个 -xt 前置（赋值语义，拆开拼会解除基线屏蔽），再拼 -t
             argv += (["-xt", ",".join(xt)] if xt else []) + ["-t", ",".join(t_list)]
         elif xt:
             argv += ["-xt", ",".join(xt)]
-        log("profile %s 展开完成：能力=%s，model=%s，provider=%s，工具面=%s",
-            repr(pname) if pname else "（未设）", ",".join(caps), model_used or "（缺省）",
-            provider_of_model(model_used) or "（缺省）",
-            ("白名单 %d 项" % len(t_list)) if t_list
-            else (("黑名单 %d 项" % len(xt)) if xt else "（缺省）"))
+        if r["model"] is not None:
+            if r["provider"] is not None:
+                argv += ["--provider", r["provider"]]
+            argv += ["--model", r["model"]]
         return argv
 
-    @staticmethod
-    def _tool_list(doc, field, name):
-        """cap.yml 工具面字段解析：取字符串数组，非字符串/空白元素 WARN 跳过；含内嵌逗号的元素
-        （如 "read,bash"）WARN 拒绝——pi 按逗号拆工具名，原样拼入会撑大白名单/黑名单；
-        非数组/缺省 → 空列表（= 未声明，不参与并集合并，调用方不拼参数）。"""
-        v = doc.get(field)
-        if v is None:
+    def _compaction_argv(self):
+        """profile `contextCompaction` 的执行体注入（**task 与 resident 两形态同等**：策略住 profile，
+        与形态无关）；注入位在能力（caps）之后（`-e` 是累加语义，顺序无副作用，但日志能看出来源）。
+
+        策略归一、执行体在场性判定与全部降级分支都在解析层（两者同进同退：`contextCompactionExt`
+        非空 ⇔ 策略合法 ∧ 执行体在场）；pi 对 `-e` 的加载错误是致命的，绝不指向不存在的路径。
+        注入时置 `cc_injected` ⇒ `spawn_pi` 才传 env `CONTEXT_COMPACTION_ENV`
+        （env 与 `-e` 同进同退：只传 env 无执行体 = 无人消费，只注执行体无 env = 扩展静默不启用）。
+        返回 `[]` ∨ `["-e", <绝对路径>]`。"""
+        p = self.cc_ext
+        if not p:
             return []
-        if not isinstance(v, list):
-            log("WARN: 能力 %r cap.yml 的 %s 字段非数组 %r，跳过", name, field, v)
-            return []
-        out = []
-        for item in v:
-            if isinstance(item, str) and item.strip():
-                t = item.strip()
-                if "," in t:
-                    log("WARN: 能力 %r cap.yml 的 %s 元素 %r 含内嵌逗号，拒绝"
-                        "（pi 按逗号拆工具名，防白名单/黑名单被撑大）", name, field, item)
-                    continue
-                out.append(t)
-            else:
-                log("WARN: 能力 %r cap.yml 的 %s 含非字符串/空元素 %r，跳过", name, field, item)
-        return out
+        self.cc_injected = True
+        return ["-e", p]
 
     def spawn_pi(self):
         self.clear_ready_marks()       # 陈旧标记不得骗开本代就绪门（先于 pi 启动）
