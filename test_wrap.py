@@ -1430,7 +1430,8 @@ def _cmd_prefix_keys(text):
 
 def t47_spec_command_env_scrub():
     """T47 `spec.command` env 前缀键 ⊆ 洗刷名单（提交期钉桩）：
-      a) 扫到的前缀键集合含已知四枚（防正则失配 ⇒ 扫到 0 枚的假绿）；
+      a) 扫到的前缀键集合含 `known` 全集（防正则失配 ⇒ 扫到 0 枚的假绿；枚数从集合
+         现场取、不写死数字 ⇒ 名单增删不会再造出同款失真）；
       b) 逐枚断言 scrub_env 真洗掉（漏列 ⇒ 红在提交前，不红在事故里）。"""
     import envscrub
     ws = os.path.normpath(os.path.join(HERE, ".."))
@@ -1448,7 +1449,8 @@ def t47_spec_command_env_scrub():
         ok("T47 各声明源均不在本快照内 → 本组跳过（无断言可跑）", True)
         return
     known = {"DISPATCH_PROFILE", "AGENTD_RESIDENT", "AGENTD_SESSION_NAME"}
-    ok("T47a 扫到已知三枚前缀键（正则未失配、非假绿）", known <= set(found),
+    ok("T47a 扫到 known 全集（%d 枚）前缀键（正则未失配、非假绿）" % len(known),
+       known <= set(found),
        sorted(found))
     for k in sorted(found):
         scrubbed = envscrub.scrub_env(base={k: "1", "PATH": "/usr/bin",
