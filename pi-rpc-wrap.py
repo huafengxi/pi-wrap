@@ -76,7 +76,7 @@ pi 任何退出 = 代终止事实透传退出码，
 skill 路径 / 活动工具集 / 模型 / 压缩策略）。本文件对人格面只做两件事（`_persona_ext_argv`）：
 ① 把注入层扩展 `-e` 进去（同时钉住它在 pi 扩展装载序里的位置 = 先于自动发现的全局扩展，
 故人格正文落在其它扩展的追加之前）；② 透传它需要的两枚输入 env（`DISPATCH_PROFILE` = profile 名、
-`AGENTD_RESIDENT` = 形态；均来自 spec.command，逐字不改）。机制口径权威 = assistant/DISPATCH.md §3，
+`AGENTD_RESIDENT` = 形态；均来自 spec.command，逐字不改）。机制口径权威 = dispatch/DISPATCH.md §3，
 装配面逐格全文 = bots/docs/profile-assembly.md，资产形态与字段规范 = bots/README.md
 「人格资产」/「知识库规范」节，解析层的输入输出契约 = persona.py 模块头。
 **排障面的位置变更**：逐能力注入日志（`人格装配（会话内注入）：…`）与解析层告警现在写在 **pi 的
@@ -498,7 +498,7 @@ class Wrap:
 
         为何必须「非空」而不是「存在」：此前两例的形态就是「exitcode=0 而 report.md
         **零字节**」——按存在性判会让零字节报告算成已交付，前鉴形态一点没治。口径同源 =
-        assistant/DISPATCH.md「完成判定」与 agentd/report.py 的 has_report。
+        dispatch/DISPATCH.md「完成判定」与 agentd/report.py 的 has_report。
         惰性 import（不在模块顶部）：wrap 在每次 spawn 的关键路径上，顶部 import 面越小越好；
         导入失败 ⇒ 退化为本地最小实现（getsize>0 ∧ 有非空白字节）+ WARN，不抛。
         """

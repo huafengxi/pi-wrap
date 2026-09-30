@@ -7,7 +7,7 @@
      在会话内注入 —— 手工调用 `pi --profile <名>` 走这条，无需 wrap）。
 
 两层模型（原子能力 CAP + profile 薄清单）与字段规范权威 = `bots/README.md`「人格资产」节；
-机制口径 = `assistant/DISPATCH.md` §3；装配面逐格全文 = `bots/docs/profile-assembly.md`。
+机制口径 = `dispatch/DISPATCH.md` §3；装配面逐格全文 = `bots/docs/profile-assembly.md`。
 
 CLI（扩展侧 `execFileSync` 调用；**stdout = 一个 JSON 对象**，告警/摘要进 stderr）：
 
