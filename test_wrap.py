@@ -25,6 +25,27 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 WRAP = os.path.join(HERE, "pi-rpc-wrap.py")
 FAKEPI = os.path.join(HERE, "fakepi_rpc.py")
+
+
+def _wrap_ext_dir_rel():
+    """扩展根（相对工作区根）单点：**从被测脚本源码取**，本文件不硬拼调用方目录。
+
+    被测面 = pi-rpc-wrap.py 的 `EXT_DIR_REL`（可经 AGENTD_EXT_REL 注入）⇒ wrap 侧改缺省值，
+    本文件零改动即跟随；形态变了（改名/换写法）就响亮报错，不静默用旧路径跑出假绿。
+    """
+    with open(WRAP, encoding="utf-8") as f:
+        src = f.read()
+    m = re.search(r'^EXT_DIR_REL = os\.environ\.get\("AGENTD_EXT_REL"\) or "([^"]+)"$',
+                  src, re.M)
+    if not m:
+        raise AssertionError(
+            "pi-rpc-wrap.py 的扩展根单点 EXT_DIR_REL 不在场/形态已变 ⇒ 本文件的派生路径失效，"
+            "改 _wrap_ext_dir_rel 的解析式（⛔ 不要在本文件里硬拼扩展目录）")
+    return m.group(1)
+
+
+EXT_DIR_REL = _wrap_ext_dir_rel()
+EXT_DIR_PARTS = tuple(EXT_DIR_REL.split("/"))
 # proto.py 住在兄弟仓 agentd/（协议单点，与 TS 侧 core.ts 同源）；AGENTD_DIR 可改指
 AGENTD_DIR = os.environ.get("AGENTD_DIR") or os.path.join(
     os.path.dirname(HERE), "agentd")
@@ -561,9 +582,11 @@ PLANNER_MODEL = "llm-router/planner"            # 生产常驻 profile（dispatc
 def t29_child_exts():
     """T29 子端扩展注入面：CHILD_EXTS 两文件在场 → 任务形态 argv 按序
     注入两个 -e（含 receiver-child = 子任务自家信箱的推送收件面）；文件缺失 → 跳过不拖垮
-    会话（既有容错口径）；resident 形态一律不注入（主端 index.ts 由 workdir 的 .pi 自动发现，
-    其 receiver 已覆盖自家信箱，再注入只会白占一份 watch/poll）。"""
-    rel_dir = os.path.join("assistant", ".pi", "extensions", "agentd")
+    会话（既有容错口径）；resident 形态一律不注入（主端 index.ts 由**全局装载面**发现、与 cwd
+    无关，其 receiver 已覆盖自家信箱，再注入只会白占一份 watch/poll）。
+
+    扩展目录一律由 `EXT_DIR_PARTS`（= 被测脚本的 EXT_DIR_REL 单点）派生，⛔ 不在此硬拼。"""
+    rel_dir = os.path.join(*EXT_DIR_PARTS)
     names = ("ask-user-child.ts", "receiver-child.ts")
 
     def _mk_exts(e):
@@ -624,7 +647,7 @@ def t29_child_exts():
 
 def _mk_child_exts(e, names=("ask-user-child.ts", "receiver-child.ts")):
     """在临时树里造子端扩展文件（wrap 只判存在性 → 桦文件即可）。"""
-    d = os.path.join(e.root, "assistant", ".pi", "extensions", "agentd")
+    d = os.path.join(e.root, *EXT_DIR_PARTS)
     os.makedirs(d, exist_ok=True)
     for n in names:
         with open(os.path.join(d, n), "w") as f:
@@ -1190,8 +1213,7 @@ def t43_heartbeat_prompt_anchor_lines():
     渲染（$HOME 内 → 波浪号）；④ 参数行点名执行机 env。
     """
     reg_path = os.path.join(HERE, "..", "heartbeats", "register.py")
-    core_path = os.path.join(HERE, "..", "assistant", ".pi", "extensions",
-                             "agentd", "core.ts")
+    core_path = os.path.join(HERE, "..", *EXT_DIR_PARTS, "core.ts")
     with open(reg_path, encoding="utf-8") as f:
         reg = f.read()
     with open(core_path, encoding="utf-8") as f:
@@ -1257,8 +1279,8 @@ def t45_retired_marker_zero_reflow():
        sorted(envscrub.ENV_SCRUB_EXACT))
 
     # ---- b) 机制面 ----
-    for rel in (("assistant", ".pi", "extensions", "agentd", "core.ts"),
-                ("assistant", ".pi", "extensions", "agentd", "index.ts"),
+    for rel in (EXT_DIR_PARTS + ("core.ts",),
+                EXT_DIR_PARTS + ("index.ts",),
                 ("agentd", "envscrub.py"),
                 ("agentd", "agent-file-protocol.md")):
         txt = _read(*rel)
@@ -1290,7 +1312,7 @@ def t45_retired_marker_zero_reflow():
 
     # ---- e) spec.command 形态同源（无 env 前缀）----
     reg = _read("heartbeats", "register.py")
-    core = _read("assistant", ".pi", "extensions", "agentd", "core.ts")
+    core = _read(*(EXT_DIR_PARTS + ("core.ts",)))
     m = (re.search(r"^COMMAND = '(.+)'", reg, re.M)
          or re.search(r'^COMMAND = "(.+)"', reg, re.M))
     ok("T45e registrar 的 COMMAND 常量可解析", m is not None, reg[:200])
@@ -1550,7 +1572,7 @@ def t48_persona_emission():
     e = Env("t48e", extra_env={"DISPATCH_PROFILE": "dispatcher", "AGENTD_RESIDENT": "1",
                                "AGENTD_SESSION_NAME": "bot/t48e"})
     loader = _mk_loader(e.root)
-    rel_dir = os.path.join("assistant", ".pi", "extensions", "agentd")
+    rel_dir = os.path.join(*EXT_DIR_PARTS)
     for n in ("ask-user-child.ts", "receiver-child.ts"):
         fp = os.path.join(e.root, rel_dir, n)
         os.makedirs(os.path.dirname(fp), exist_ok=True)
@@ -1564,7 +1586,7 @@ def t48_persona_emission():
         pe = e.read_persona_env() or {}
         ok("T48e resident 形态同样注入注入层（人格住 profile、与形态无关）",
            argv.count(loader) == 1, repr(argv)[:300])
-        ok("T48e resident 不注入 CHILD_EXTS（主端扩展由 workdir 的 .pi 自动发现）",
+        ok("T48e resident 不注入 CHILD_EXTS（主端扩展由全局装载面发现、与 cwd 无关）",
            not [a for a in argv if "child.ts" in a], repr(argv)[:300])
         ok("T48e 形态输入透传（AGENTD_RESIDENT=1 + 会话名 ⇒ 注入层不前置基线、不回落）",
            pe.get("AGENTD_RESIDENT") == "1" and pe.get("AGENTD_SESSION_NAME") == "bot/t48e"

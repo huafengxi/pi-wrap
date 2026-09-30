@@ -100,7 +100,7 @@ import time
 from collections import deque
 
 # proto.py lives in the sibling agentd repo: it is the protocol's single source,
-# shared with the TypeScript side (assistant/.pi/extensions/agentd/core.ts) and
+# shared with the TypeScript side (the agentd extension's core.ts) and
 # with every agentd module. AGENTD_DIR overrides the location for a layout where
 # the two repos are not siblings.
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -134,13 +134,17 @@ def _env_float(name, default, cap=None):
     if cap is not None:
         v = min(v, cap)
     return v if v > 0 else default
-CHILD_EXTS = (            # 子端扩展（相对 $AGENT_ROOT，与 core.ts 的 *_REL 常量同源）
-    "assistant/.pi/extensions/agentd/ask-user-child.ts",
+# 扩展根（相对 $AGENT_ROOT）：agentd 扩展住调用方的**全局装载面**，本仓不逐处钉它的目录
+# ⇒ 单点在此，可由 AGENTD_EXT_REL 注入（部署面变化时零改码）；与 TS 侧 core.ts 的
+# ASK_USER_CHILD_REL / RECEIVER_CHILD_REL 同源（跳语言 pin = 扩展自测的「注入面同源」组）。
+EXT_DIR_REL = os.environ.get("AGENTD_EXT_REL") or "pi-core/agent/extensions/agentd"
+CHILD_EXTS = (            # 子端扩展（相对 $AGENT_ROOT，由 EXT_DIR_REL 单点拼）
+    EXT_DIR_REL + "/ask-user-child.ts",
     # 子任务自家信箱的推送收件面：只收 agents/task/<本任务 id>/inbox（收件面
     # 锁死单点 = core.taskSelfMailbox），按信封 deliver 选 steer/followUp 注入。只进任务形态
-    # 分支：resident（bot 型常驻会话）由 workdir 的 .pi 自动发现主端 index.ts，其 receiver 已
-    # 覆盖自家信箱，再注入本扩展只会白占一份 watch/poll。
-    "assistant/.pi/extensions/agentd/receiver-child.ts",
+    # 分支：resident（bot 型常驻会话）的主端 index.ts 由**全局装载面**发现（cwd 无关），其
+    # receiver 已覆盖自家信箱，再注入本扩展只会白占一份 watch/poll。
+    EXT_DIR_REL + "/receiver-child.ts",
 )
 PROBE_EXT_REL = "w/ext/sessiond/probe.ts"   # sessiond 探针：任务/常驻会话
                                             # 也注入，使 spec.json?v=chat 观测面 /inspect 可用
