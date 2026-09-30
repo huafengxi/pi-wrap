@@ -62,32 +62,38 @@ def flag(name):
             pass
 
 
-if FLAG_DIR:
+def _atomic_write_flag(name, data):
+    """原子写 flag JSON：写临时文件 + os.replace，消除读方撞见空文件/半写内容的撕裂读。
+    仅在 FLAG_DIR 非空时写入。"""
+    if not FLAG_DIR:
+        return
+    p = os.path.join(FLAG_DIR, name)
+    tmp = p + ".tmp"
     try:
-        with open(os.path.join(FLAG_DIR, "argv"), "w") as f:
-            f.write(json.dumps(sys.argv) + "\n")
+        with open(tmp, "w") as f:
+            f.write(json.dumps(data) + "\n")
+        os.replace(tmp, p)
     except OSError:
-        pass
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
+if FLAG_DIR:
+    _atomic_write_flag("argv", sys.argv)
     # 就绪门 env 快照：断言 wrap 是否把两枚标记路径传给了 pi 侧
     # （任务形态传 / resident 不传 / receiver-child 缺失不传）。
-    try:
-        with open(os.path.join(FLAG_DIR, "gate_env"), "w") as f:
-            f.write(json.dumps({
-                "init_ok": os.environ.get("AGENTD_WRAP_INIT_OK", ""),
-                "recv_armed": os.environ.get("AGENTD_WRAP_RECV_ARMED", ""),
-                "mode": MODE}) + "\n")
-    except OSError:
-        pass
+    _atomic_write_flag("gate_env", {
+        "init_ok": os.environ.get("AGENTD_WRAP_INIT_OK", ""),
+        "recv_armed": os.environ.get("AGENTD_WRAP_RECV_ARMED", ""),
+        "mode": MODE})
     # 人格输入 env 快照：人格装配不住 argv（注入层是 pi 扩展）⇒ wrap 的职责只剩
     # 「把注入层 -e 进去 + 把它要读的输入 env 透传下去」，本快照钉后半句。
     # 缺键记 None（与空串区分：空串 = 传了但值为空，None = 根本没传）。
-    try:
-        with open(os.path.join(FLAG_DIR, "persona_env"), "w") as f:
-            f.write(json.dumps({k: os.environ.get(k) for k in (
-                "DISPATCH_PROFILE", "AGENTD_RESIDENT", "AGENTD_SESSION_NAME",
-                "AGENT_ROOT", "AGENT_SELF", "AGENTD_CONTEXT_COMPACTION")}) + "\n")
-    except OSError:
-        pass
+    _atomic_write_flag("persona_env", {k: os.environ.get(k) for k in (
+        "DISPATCH_PROFILE", "AGENTD_RESIDENT", "AGENTD_SESSION_NAME",
+        "AGENT_ROOT", "AGENT_SELF", "AGENTD_CONTEXT_COMPACTION")})
 
 
 def turn(rid, command, settle=True):

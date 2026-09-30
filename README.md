@@ -160,6 +160,8 @@ python3 test_wrap.py          # emission + lifecycle: argv/env, handshake, conve
                              # exit codes; no network, no real pi
 ```
 
+`test/toolface-harness/` — live-session evidence harness (real pi + real model slot); not invoked by `test_wrap.py`; excluded from CI. Single source: `test/toolface-harness/README.md`.
+
 `fakepi_rpc.py` is the `pi --mode rpc` double: it speaks the same JSON-lines
 protocol, can script failures (prompt rejection, false `agent_settled`, stream
 interrupts, self-kill with a chosen exit code) and writes an argv/env snapshot so

@@ -201,6 +201,18 @@ class Env:
             time.sleep(0.02)
         return False
 
+    def wait_flag(self, name, timeout=15):
+        """事件驱动等指定 flag 文件可读（JSON 可解析）。形态同 wait_argv，
+        用于 wait_argv 之后仍需等后续 flag 落盘的场景（fakepi_rpc.py 写序：
+        argv → gate_env → persona_env，wait_argv 只保证第一个）。绝不无条件等。
+        返回 bool（超时 False）。"""
+        dl = time.time() + timeout
+        while time.time() < dl:
+            if self._read_json(name) is not None:
+                return True
+            time.sleep(0.02)
+        return False
+
     def read_diag(self):
         p = os.path.join(self.home, "diagnosis.md")
         if not os.path.exists(p):
@@ -635,11 +647,22 @@ def t30_ready_handshake():
       f) 子端永不回写 arm → wrap 有界等待后照常收敛（不假活）+ stderr WARN；
       g) receiver-child 缺失（不注入）→ 不传 env、不等 arm（存量形态零回归）。"""
     def gate_env(e):
+        """有界重试读 gate_env flag：写入方 = fakepi_rpc.py（测试夹具）。
+        写序 argv → gate_env → persona_env，wait_argv 不保证 gate_env 已落盘；
+        文件存在但内容为空（写入方 open("w") 创建后尚未 write）= 撕裂读。
+        修法：有界重试直到 JSON 可解析，超时返 None（由后续断言带 detail 报错）。"""
         p = os.path.join(e.flags, "gate_env")
-        if not os.path.exists(p):
-            return None
-        with open(p) as f:
-            return json.loads(f.read())
+        dl = time.time() + 10
+        while time.time() < dl:
+            if not os.path.exists(p):
+                time.sleep(0.02)
+                continue
+            try:
+                with open(p) as f:
+                    return json.loads(f.read())
+            except ValueError:
+                time.sleep(0.02)
+        return None
 
     def flag_mtime(e, name):
         p = os.path.join(e.flags, name)
@@ -1536,6 +1559,7 @@ def t48_persona_emission():
     try:
         e.wait_argv(15)
         argv = e.read_argv() or []
+        e.wait_flag("persona_env")   # fakepi_rpc.py 写序：argv → gate_env → persona_env；wait_argv 不保证后者已落盘
         pe = e.read_persona_env() or {}
         ok("T48e resident 形态同样注入注入层（人格住 profile、与形态无关）",
            argv.count(loader) == 1, repr(argv)[:300])
