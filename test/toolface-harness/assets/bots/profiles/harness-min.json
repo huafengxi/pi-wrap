@@ -1,0 +1,5 @@
+{
+  "name": "harness-min",
+  "summary": "harness 最小 profile：单能力 harness-xt（excludeTools 声明面）",
+  "caps": ["harness-xt"]
+}

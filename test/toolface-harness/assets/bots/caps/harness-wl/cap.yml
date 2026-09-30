@@ -1,0 +1,3 @@
+# harness 自建能力：tools 白名单声明面
+summary: harness 能力：tools 白名单（read/ls/harness_late_tool）
+tools: [read, ls, harness_late_tool]

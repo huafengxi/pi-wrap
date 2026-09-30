@@ -13,7 +13,9 @@ SocketSupervisor）经透传链路驱动，本脚本不实现任何观测语义�
     正常完成证据 = session.jsonl 过程 + report.md 结论。
 
 职责：
-  1. 拉起 `pi --mode rpc`（--session/-n/-e 子端扩展×3 + sessiond 探针扩展/-xt ask_user；
+  1. 拉起 `pi --mode rpc`（--session/-n/-e 子端扩展〔枚数 = CHILD_EXTS 现场计数，现 2 枚：
+     ask-user-child + receiver-child〕 + sessiond 探针扩展；**人格面零 flag**：只 `-e` 注入层
+     扩展 + 透传它的输入 env，见 `_persona_ext_argv`；
      探针注入使观测面 /inspect 在任务/常驻会话可用；
      argv 依 runner 注入的 AGENT_HOME/AGENT_ROOT/AGENT_SELF 组装，跨机可移植）；
   2. prompt.md 幂等投递：会话 jsonl 已有 user 消息（复活/重放场景）则跳过；
@@ -61,14 +63,16 @@ pi session-manager 的 no-assistant guard 未落盘）→ `agent_settled` 被当
 
 resident 模式（env AGENTD_RESIDENT=1，设计 §2.2）：常驻会话
 （bot 族进程型参与方）与任务形态的差异全部关在本脚本内——不触发完成收敛（不关 pi
-stdin，主线程只等 pi 退出）、argv 会话名钉死 $AGENTD_SESSION_NAME（不注入子端扩展、
-不屏蔽 ask_user）、prompt.md 可选（不存在则裸启动）、pi 任何退出 = 代终止事实透传退出码，
+stdin，主线程只等 pi 退出）、argv 会话名钉死 $AGENTD_SESSION_NAME（不注入子端扩展；
+工具面的排除归 profile/能力声明，本脚本不预置任何形态基线）、prompt.md 可选（不存在则裸启动）、
+pi 任何退出 = 代终止事实透传退出码，
 不写诊断不误报（崩溃自愈/换代归属 = runner restartPolicy=auto / control 三动作）。
 其余（socket 生命周期/.pid 伴生档/透传/小环）逐字复用。
 
 人格装配**不在本文件**（两层，均住别处）：解析层 `persona.py`（同目录；profile/caps →
 结构化注入面，合并语义与全部 fail-soft 降级分支的单一实现）+ 注入层 pi 扩展
-`bots/extensions/profile-loader/index.ts`（会话内把那份结构映射到 pi 的 API：系统提示追加 /
+`pi-core/agent/extensions/profile-loader.ts`（= 常量 PROFILE_LOADER_EXT_REL；会话内把那份结构
+映射到 pi 的 API：系统提示追加 /
 skill 路径 / 活动工具集 / 模型 / 压缩策略）。本文件对人格面只做两件事（`_persona_ext_argv`）：
 ① 把注入层扩展 `-e` 进去（同时钉住它在 pi 扩展装载序里的位置 = 先于自动发现的全局扩展，
 故人格正文落在其它扩展的追加之前）；② 透传它需要的两枚输入 env（`DISPATCH_PROFILE` = profile 名、
@@ -141,7 +145,7 @@ CHILD_EXTS = (            # 子端扩展（相对 $AGENT_ROOT，与 core.ts 的 
 PROBE_EXT_REL = "w/ext/sessiond/probe.ts"   # sessiond 探针：任务/常驻会话
                                             # 也注入，使 spec.json?v=chat 观测面 /inspect 可用
 # 人格装配不住在本文件：解析层 = 同目录 `persona.py`（合并语义与降级分支的单一实现），
-# 注入层 = pi 侧扩展 `bots/extensions/profile-loader/index.ts`（本文件只负责把它 `-e` 进去）。
+# 注入层 = pi 侧扩展 PROFILE_LOADER_EXT_REL（本文件只负责把它 `-e` 进去）。
 # 本文件对人格面只做两件事：① 注入那一个扩展；② 透传身份/人格输入 env（DISPATCH_PROFILE /
 # AGENTD_RESIDENT，来自 spec.command，逐字不改）。常量从解析层取用（不在此复制，复制即漂移）。
 import persona                                                # noqa: E402
@@ -333,8 +337,9 @@ class Wrap:
     def build_argv(self):
         if self.resident:
             # resident 形态：会话名钉死 $AGENTD_SESSION_NAME（缺省回退）；
-            # 不注入子端扩展（主端全套扩展由 workdir 的 .pi 自动发现）、不屏蔽 ask_user
-            #（主端 ask_user 链路保留）。
+            # 不注入子端扩展（主端全套扩展由 workdir 的 .pi 自动发现）；工具面的排除来自
+            # profile 装载的能力声明（cap.yml 的 excludeTools/tools），形态基线不预置
+            #（解析层 persona.py 的 FORM_XT_BASELINE：resident 为空）。
             argv = [self.pi_bin, "--mode", "rpc", "--session", self.session_file,
                     "-n", self.session_name or "[resident %s]" % self.name]
             argv += self._probe_ext_argv()
@@ -371,11 +376,12 @@ class Wrap:
         """把人格注入层扩展 `-e` 进 pi（任务/常驻两形态同等）。
 
         **本文件不装配人格**：profile → caps → 注入面的解析在 `persona.py`（合并语义与全部
-        fail-soft 降级分支的单一实现），会话内注入在 `bots/extensions/profile-loader/index.ts`
+        fail-soft 降级分支的单一实现），会话内注入在 `PROFILE_LOADER_EXT_REL` 指的 pi 扩展
         （系统提示追加 / skill 路径 / 活动工具集 / 模型 / 压缩策略）。这里只负责让那个扩展在场，
         以及把它需要的两个输入透传下去（都在 `os.environ` 里，`spawn_pi` 原样带过去）：
           - `DISPATCH_PROFILE` = profile 名（单值；来自 spec.command 的 env 前缀，逐字不改）；
-          - `AGENTD_RESIDENT` = 形态（`1` = 常驻：不前置基线能力、不回落、不屏蔽 ask_user）。
+          - `AGENTD_RESIDENT` = 形态（`1` = 常驻：不前置基线能力、不回落；工具面的排除只来自
+            profile 装载的能力声明，形态基线不预置 = 解析层 `FORM_XT_BASELINE` 的 resident 档为空）。
         两者皆缺时注入层按形态自行处置（任务形态回落 `executor` profile、常驻形态裸启动），
         判据在解析层，不在此重复。
 
@@ -737,8 +743,7 @@ class Wrap:
         同死 ⇒ 卡在管道缓冲里的内容无人读、永久丢失。⇒ 任何依赖 EOF flush 的形态（等退出
         再落盘 / 只调 flush 时机 / 加大缓冲）在那条路上恒失效，必须用 `read1(n)`（至多一次
         底层 read，有数据即返回；EOF 仍回 b""）∨ 对 raw fd `os.read`。内存尾（stderr_tail /
-        STDERR_TAIL_MAX）与诊断尾同源，语义不变。钉住本条的测试 = test_wrap.py 的
-        「stderr 泵存活期落盘」条。
+        STDERR_TAIL_MAX）与诊断尾同源，语义不变。
         """
         try:
             with open(self.stderr_log, "ab") as lf:

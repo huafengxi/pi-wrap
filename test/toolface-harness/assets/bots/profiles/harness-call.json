@@ -1,0 +1,5 @@
+{
+  "name": "harness-call",
+  "summary": "harness 对抗档 profile：tools 白名单 2 项 + 正文要求照用户提示调用工具（强制触发执行面兜底）",
+  "caps": ["harness-call"]
+}

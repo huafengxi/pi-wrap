@@ -1,0 +1,3 @@
+# harness 自建能力：声明工具面排除（excludeTools），用于验注入层的排除面对迟注册工具仍生效
+summary: harness 能力：excludeTools 声明面（ask_user + harness_late_tool）
+excludeTools: [ask_user, harness_late_tool]

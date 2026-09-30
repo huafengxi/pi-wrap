@@ -1,0 +1,3 @@
+# harness 自建能力：对抗档用的窄白名单（**不含** host_info ⇒ 该工具在执行面必须被拦）
+summary: harness 能力：tools 白名单（read/ls），供对抗档强制触发 tool_call 拦截
+tools: [read, ls]
