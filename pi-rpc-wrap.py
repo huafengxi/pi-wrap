@@ -729,10 +729,21 @@ class Wrap:
         self.activity = True
 
     def _read_stderr(self):
+        """pi stderr 泵：**到达即写**（不等 EOF）。
+
+        硬要求 = 小额 stderr 在子进程**存活期**就落 `run/agentd/<name>.stderr.log`：
+        `BufferedReader.read(n)` 攒满 n ∨ EOF 才返回 ⇒ 注入层的装配摘要行与全部 fail-soft
+        WARN（都远小于 n）在活会话期恒不可见；而换代/kill 路径上读端（本进程）与写端（pi）
+        同死 ⇒ 卡在管道缓冲里的内容无人读、永久丢失。⇒ 任何依赖 EOF flush 的形态（等退出
+        再落盘 / 只调 flush 时机 / 加大缓冲）在那条路上恒失效，必须用 `read1(n)`（至多一次
+        底层 read，有数据即返回；EOF 仍回 b""）∨ 对 raw fd `os.read`。内存尾（stderr_tail /
+        STDERR_TAIL_MAX）与诊断尾同源，语义不变。钉住本条的测试 = test_wrap.py 的
+        「stderr 泵存活期落盘」条。
+        """
         try:
             with open(self.stderr_log, "ab") as lf:
                 while True:
-                    d = self.pi.stderr.read(4096)
+                    d = self.pi.stderr.read1(4096)
                     if not d:
                         break
                     lf.write(d)

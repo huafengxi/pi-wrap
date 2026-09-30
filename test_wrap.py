@@ -1514,6 +1514,43 @@ def t48_persona_emission():
         e.cleanup([p])
 
 
+def t49_stderr_pump_live():
+    """T49 stderr 泵「到达即写」：小额 stderr（远小于 4096B）在 pi **存活期**就落
+    `run/agentd/<name>.stderr.log`，不等 EOF。
+
+    判据钉在「存活期」而不是「退出后」：换代/kill 路径下读端（wrap）与写端（pi）同死 ⇒
+    卡在管道缓冲里的内容永久丢失 ⇒ 任何依赖 EOF flush 的修法在那条路上恒失效（只能验到
+    优雅退出这一档）。fake pi 开机就写一行（~30B）且 `hang_settle` 永不收敛 ⇒ 子进程恒存活，
+    「落盘时子进程仍存活」可断言。生产面的同源内容 = 注入层的装配摘要行与 fail-soft WARN。
+    """
+    e = Env("t49", fake_mode="hang_settle")
+    p = e.start_wrap()
+    try:
+        ok("T49 sock 就位", e.wait_sock())
+        ok("T49 fake pi 已启动（argv 快照在场）", e.wait_argv(15))
+        slog = os.path.join(e.root, "run", "agentd", e.name + ".stderr.log")
+        text, alive = "", False
+        dl = time.time() + 10          # 有界轮询（假活防线）
+        while time.time() < dl:
+            alive = p.poll() is None
+            try:
+                with open(slog, encoding="utf-8", errors="replace") as f:
+                    text = f.read()
+            except OSError:
+                text = ""
+            if "fake-pi boot" in text:
+                break
+            time.sleep(0.05)
+        ok("T49 小额 stderr 存活期即落盘（不等 EOF）", "fake-pi boot" in text,
+           "alive=%s log=%s size=%d head=%r" % (alive, slog, len(text), text[:120]))
+        ok("T49 落盘时子进程仍存活（不是退出后的 EOF flush）", alive,
+           "poll=%s" % p.poll())
+        ok("T49 落盘量远小于 read 的 4096 门槛（钉「攒满 n 才返回」那一格）",
+           0 < len(text) < 4096, "size=%d" % len(text))
+    finally:
+        e.cleanup([p])
+
+
 def main():
     global PASS, FAIL
     os.chmod(FAKEPI, 0o755)
@@ -1545,7 +1582,8 @@ def main():
                t45_retired_marker_zero_reflow,
                t46_resident_prompt_delivery,
                t47_spec_command_env_scrub,
-               t48_persona_emission):
+               t48_persona_emission,
+               t49_stderr_pump_live):
         print("---- %s" % fn.__name__)
         try:
             fn()
