@@ -1414,7 +1414,6 @@ _CMD_PREFIX_SOURCES = (
     # 单独 checkout）⇒ 显式记一条跳过，不静默、不当失败。
     ("bots/daemon/*/spec.json", "守护型/常驻 bot 的被追踪声明源"),
     ("heartbeats/register.py", "定时触发面的登记脚本（spec.command 常量）"),
-    ("w/ext/sessiond/proc.py", "create_bot 的 spec.command 模板"),
 )
 # `KEY=VAL KEY=VAL … exec|python3|bash` 形态的前缀键（值可含引号/`$`/`{}`）
 _CMD_ENV_PREFIX_RE = re.compile(r"((?:\b[A-Z][A-Z0-9_]*=\S+[ \t]+)+)(?:exec|python3|bash)\b")
@@ -1446,7 +1445,7 @@ def t47_spec_command_env_scrub():
                 for k in _cmd_prefix_keys(f.read()):
                     found.setdefault(k, set()).add(os.path.relpath(h, ws))
     if not found:
-        ok("T47 三个声明源均不在本快照内 → 本组跳过（无断言可跑）", True)
+        ok("T47 各声明源均不在本快照内 → 本组跳过（无断言可跑）", True)
         return
     known = {"DISPATCH_PROFILE", "AGENTD_RESIDENT", "AGENTD_SESSION_NAME"}
     ok("T47a 扫到已知三枚前缀键（正则未失配、非假绿）", known <= set(found),
