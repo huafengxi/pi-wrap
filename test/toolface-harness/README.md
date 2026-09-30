@@ -95,7 +95,7 @@ HARNESS_ROOT=$R ./clean.sh                      # 收尾：过断言后删工作
 | `excl-res-late` | direct（`--probe-last`） | resident | `harness-min` | 装配摘要行 `人格装配（会话内注入）：profile=harness-min form=resident … xt=ask_user,harness_late_tool …`；`at-late-register … lateActive=true`（pi 自己把迟注册项并进活动集）而**下一个施加点**（`input`）后 `lateActive=false`；`工具面过滤（before_provider_request）：payload.tools 15 → 13`；`askUserInPayload=false lateInPayload=false` |
 | `wl-task-late` | direct（`--probe-last`） | task | `harness-wl` | `tools=3`；`payload.tools 15 → 3`；`payloadTools=[read,ls,harness_late_tool] lateInPayload=true`（白名单**不误伤**：白名单内的迟注册工具照常给） |
 | `adv-block-hostinfo` | direct（`--probe-last`，对抗档） | task | `harness-call` | `adversary reset-active(before_agent_start) → […host_info…]`；`工具面过滤（before_provider_request）：payload.tools 14 → 2`；`adversary payload-readd name=host_info … tools 2 → 3`；**`工具面拦截：host_info 不在本 profile 的 tools 白名单内 ⇒ 阻止执行（不中断本轮）`**；会话 jsonl 里该调用的 toolResult 文本 = `人格工具面：host_info … 不要重试 …`，且本轮不中断（模型照常收尾） |
-| `wrap-task-excl` | wrap（生产形态） | task | `harness-min` | **两份 stderr 分开取**：`$R/out/<case>/stderr.log` = wrap 自己的行（`观测端点就绪: …` / `人格注入层装载：…（profile=harness-min，form=task）` / `任务收敛完成（exit 0）`）；`$R/run/agentd/<case>.stderr.log` = pi 的 stderr（装配摘要行 + `工具面过滤（before_provider_request）：payload.tools 15 → 14` + 探针读数）；`sizes.txt` 显示 `alive=True` 时 size 即 >0 |
+| `wrap-task-excl` | wrap（生产形态） | task | `harness-min` | **两份 stderr 分开取**：`$R/out/<case>/stderr.log` = wrap 自己的行（`观测端点就绪: …` / `人格注入层装载：…（profile=harness-min）`——**不含形态字段**：形态轴住 profile 的 `form`，由解析层定档后写在注入层自己的装配摘要行里 / `任务收敛完成（exit 0）`）；`$R/run/agentd/<case>.stderr.log` = pi 的 stderr（装配摘要行 + `工具面过滤（before_provider_request）：payload.tools 15 → 14` + 探针读数）；`sizes.txt` 显示 `alive=True` 时 size 即 >0 |
 
 对抗档为什么存在（机制细节 = `probe/toolface-probe.ts` 头注）：pi 的 `prepareToolCall` 先在**本轮
 上下文快照**里查工具，查不到就直接回 `Tool <name> not found`、`beforeToolCall` 钩子不触发 ⇒ 拦截行
@@ -108,6 +108,12 @@ HARNESS_ROOT=$R ./clean.sh                      # 收尾：过断言后删工作
 
 ## 已知边界
 
+- `--form <档>` 有**两个協调效果**（人格形态轴已从 env 收进 profile 的 `form` 字段）：① 写常驻标记
+  env（`AGENTD_RESIDENT` + `AGENTD_SESSION_NAME`）——它们仍是 wrap 的完成收敛形态与注入层「是否
+  agentd 监督会话」判据的输入；② 把工作根里那份 profile **副本**的 `form` 字段写成同值（只写
+  harness 自建的副本：软链/跳出工作根一律不写，判据 = `drive.py:sync_profile_form` 的三重身份断言）。
+- 工具面的排除**只来自能力声明**（`cap.yml` 的 `excludeTools`）：解析层已无形态基线排除集，本 harness
+  的三枚自建 profile 也不列生产的 `executor` 能力 ⇒ 两档的期望读数只差在常驻标记驱动的 wrap 行为上。
 - `--form resident` 的会话**永不收敛**（wrap 档不关 pi stdin）⇒ 驱动按 `--settle-timeout` 上界发
   SIGTERM（wrap 的 handler 关 pi stdin ⇒ pi 优雅退出），`meta.json` 的 `rc=143` 是设计路径、不是失败。
 - 换 pi 的 agent dir 做对照实验（例如去掉某个第三方 package）用 `--agent-dir <目录>`：那个目录要

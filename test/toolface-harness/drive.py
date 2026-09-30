@@ -112,13 +112,51 @@ def pump(stream, path, sizes=None, tag=""):
                 sizes.append((time.time(), tag, len(d)))
 
 
+def sync_profile_form(root, profile, form):
+    """把工作根里那份 profile 的 `form` 字段写成 `form`（人格形态轴住 profile 清单）。
+
+    写面前的三重身份断言（harness 红线：生产资产只经软链挂进，绝不写）：
+      ① 未给 profile 名 ⇒ 无事可做（那一档正好量解析层的缺省档回落）；
+      ② 路径是软链 ⇒ 指向生产资产 ⇒ 不写，只打一行 SKIP；
+      ③ realpath 不在工作根内部 ⇒ REFUSE（退出 2，不写不猜）。
+    只有 setup.sh `cp` 进来的 harness 自建 profile（真文件、在工作根内）会被改写。
+    """
+    if not profile:
+        return
+    path = os.path.join(root, "bots", "profiles", profile + ".json")
+    if not os.path.exists(path):
+        print("SKIP: 工作根里没有 profile %r（%s 不在场）⇒ 不写形态声明" % (profile, path))
+        return
+    if os.path.islink(path):
+        print("SKIP: %s 是软链（生产资产）⇒ 不写形态声明（人格形态轴只改 harness 自建副本）" % path)
+        return
+    rp = os.path.realpath(path)
+    rr = os.path.realpath(root)
+    if not rp.startswith(rr + os.sep):
+        print("REFUSE: %s 的 realpath %s 不在工作根 %s 内部 ⇒ 不写" % (path, rp, rr))
+        sys.exit(2)
+    with open(rp, encoding="utf-8") as f:
+        doc = json.load(f)
+    if doc.get("form") == form:
+        return
+    doc["form"] = form
+    with open(rp, "w", encoding="utf-8") as f:
+        json.dump(doc, f, ensure_ascii=False, indent=1)
+        f.write("\n")
+    print("profile-form: %s 的 `form` ← %s（工作根副本，非生产资产）" % (profile, form))
+
+
 def main():
     import argparse
 
     ap = argparse.ArgumentParser()
     ap.add_argument("case")
     ap.add_argument("--mode", choices=["direct", "wrap"], default="direct")
-    ap.add_argument("--form", choices=["task", "resident"], default="task")
+    ap.add_argument("--form", choices=["task", "resident"], default="task",
+                    help="会话档，两个協调效果：① 常驻标记 env（AGENTD_RESIDENT + "
+                         "AGENTD_SESSION_NAME）——供 wrap 的完成收敛形态与注入层的「是否 agentd "
+                         "监督会话」判据；② 把工作根里那份 profile **副本**的 `form` 字段写成同值"
+                         "（人格形态轴住 profile 清单、不住 env；副本是软链 ⇒ 不写，只打一行 SKIP）")
     ap.add_argument("--profile", default="")
     ap.add_argument("--delay", type=float, default=0.0, help="投递 prompt 前的等待秒数（迟注册排在首轮之前用）")
     ap.add_argument("--late-ms", type=int, default=0, help=">0 ⇒ 探针在 session_start 后 N ms 注册 harness_late_tool")
@@ -136,6 +174,7 @@ def main():
     args = ap.parse_args()
 
     root = guard_root()
+    sync_profile_form(root, args.profile, args.form)
     if args.adversary_tool and not (args.probe_last or args.mode == "wrap"):
         print("REFUSE: --adversary-tool 需要探针装载在注入层之后（--probe-last ∨ --mode wrap）")
         sys.exit(2)

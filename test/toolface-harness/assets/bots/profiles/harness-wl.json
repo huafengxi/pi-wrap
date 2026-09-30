@@ -1,5 +1,6 @@
 {
   "name": "harness-wl",
   "summary": "harness 白名单 profile：tools 白名单 3 项（验白名单语义未被削弱）",
+  "form": "task",
   "caps": ["harness-wl"]
 }

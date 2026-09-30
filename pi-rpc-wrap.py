@@ -75,8 +75,9 @@ pi 任何退出 = 代终止事实透传退出码，
 映射到 pi 的 API：系统提示追加 /
 skill 路径 / 活动工具集 / 模型 / 压缩策略）。本文件对人格面只做两件事（`_persona_ext_argv`）：
 ① 把注入层扩展 `-e` 进去（同时钉住它在 pi 扩展装载序里的位置 = 先于自动发现的全局扩展，
-故人格正文落在其它扩展的追加之前）；② 透传它需要的两枚输入 env（`DISPATCH_PROFILE` = profile 名、
-`AGENTD_RESIDENT` = 形态；均来自 spec.command，逐字不改）。机制口径权威 = dispatch/DISPATCH.md §3，
+故人格正文落在其它扩展的追加之前）；② 透传它需要的那一枚人格输入 env（`DISPATCH_PROFILE` =
+profile 名，来自 spec.command，逐字不改；会话形态**不住 env**，它是 profile 清单的 `form`
+字段，由解析层读出）。机制口径权威 = dispatch/DISPATCH.md §3，
 装配面逐格全文 = bots/docs/profile-assembly.md，资产形态与字段规范 = bots/README.md
 「人格资产」/「知识库规范」节，解析层的输入输出契约 = persona.py 模块头。
 **排障面的位置变更**：逐能力注入日志（`人格装配（会话内注入）：…`）与解析层告警现在写在 **pi 的
@@ -150,8 +151,9 @@ PROBE_EXT_REL = "w/ext/sessiond/probe.ts"   # sessiond 探针：任务/常驻会
                                             # 也注入，使 spec.json?v=chat 观测面 /inspect 可用
 # 人格装配不住在本文件：解析层 = 同目录 `persona.py`（合并语义与降级分支的单一实现），
 # 注入层 = pi 侧扩展 PROFILE_LOADER_EXT_REL（本文件只负责把它 `-e` 进去）。
-# 本文件对人格面只做两件事：① 注入那一个扩展；② 透传身份/人格输入 env（DISPATCH_PROFILE /
-# AGENTD_RESIDENT，来自 spec.command，逐字不改）。常量从解析层取用（不在此复制，复制即漂移）。
+# 本文件对人格面只做两件事：① 注入那一个扩展；② 透传人格输入 env（DISPATCH_PROFILE，
+# 来自 spec.command，逐字不改；形态轴住 profile 的 `form` 字段 ⇒ 不经 env）。
+# 常量从解析层取用（不在此复制，复制即漂移）。
 import persona                                                # noqa: E402
 CONTEXT_COMPACTION_ENV = persona.CONTEXT_COMPACTION_ENV       # 归一化策略的注入通道（紧凑 JSON）；
                                                               # 写者 = profile-loader 扩展（会话内），
@@ -341,9 +343,9 @@ class Wrap:
     def build_argv(self):
         if self.resident:
             # resident 形态：会话名钉死 $AGENTD_SESSION_NAME（缺省回退）；
-            # 不注入子端扩展（主端全套扩展由 workdir 的 .pi 自动发现）；工具面的排除来自
-            # profile 装载的能力声明（cap.yml 的 excludeTools/tools），形态基线不预置
-            #（解析层 persona.py 的 FORM_XT_BASELINE：resident 为空）。
+            # 不注入子端扩展（主端全套扩展由 workdir 的 .pi 自动发现）；工具面的排除只来自
+            # profile 装载的能力声明（cap.yml 的 excludeTools/tools）——解析层无形态基线，
+            # 本脚本也不预置任何工具面。
             argv = [self.pi_bin, "--mode", "rpc", "--session", self.session_file,
                     "-n", self.session_name or "[resident %s]" % self.name]
             argv += self._probe_ext_argv()
@@ -382,11 +384,13 @@ class Wrap:
         **本文件不装配人格**：profile → caps → 注入面的解析在 `persona.py`（合并语义与全部
         fail-soft 降级分支的单一实现），会话内注入在 `PROFILE_LOADER_EXT_REL` 指的 pi 扩展
         （系统提示追加 / skill 路径 / 活动工具集 / 模型 / 压缩策略）。这里只负责让那个扩展在场，
-        以及把它需要的两个输入透传下去（都在 `os.environ` 里，`spawn_pi` 原样带过去）：
-          - `DISPATCH_PROFILE` = profile 名（单值；来自 spec.command 的 env 前缀，逐字不改）；
-          - `AGENTD_RESIDENT` = 形态（`1` = 常驻：不前置基线能力、不回落；工具面的排除只来自
-            profile 装载的能力声明，形态基线不预置 = 解析层 `FORM_XT_BASELINE` 的 resident 档为空）。
-        两者皆缺时注入层按形态自行处置（任务形态回落 `executor` profile、常驻形态裸启动），
+        以及把它需要的那一个输入透传下去（在 `os.environ` 里，`spawn_pi` 原样带过去）：
+          - `DISPATCH_PROFILE` = profile 名（单值；来自 spec.command 的 env 前缀，逐字不改）。
+        **会话形态不是本层/注入层的输入**：它住 profile 清单的 `form` 字段（三档
+        task|resident|interactive），由解析层读出并回写进它输出的 `form`。`AGENTD_RESIDENT`
+        仍在环境里且照旧透传，但只作「是否 agentd 监督会话」的判据（注入层的零行为规则）
+        与本脚本的 resident 行为（完成收敛闸 / 会话名 / 不注入子端扩展 / 裸启动）。
+        profile 名缺省时注入层按解析层的缺省档处置（回落 `executor` profile），
         判据在解析层，不在此重复。
 
         `-e` 的注入位还有第二重作用：pi 的扩展装载序是 **CLI `-e` 先于自动发现**
@@ -404,9 +408,10 @@ class Wrap:
                 "无能力捆绑 skill、工具面不收窄、model 不切换；取证 = 会话内 /persona）: %s", p)
             return []
         self.loader_injected = True
-        log("人格注入层装载：%s（profile=%s，form=%s）", p,
-            os.environ.get("DISPATCH_PROFILE") or "（未设 → 解析层按形态处置）",
-            "resident" if self.resident else "task")
+        # 形态不在本行：它住 profile 的 `form` 字段，由解析层读出后写在注入层自己的
+        # 装配摘要行里（`人格装配（会话内注入）：… form=<档>`，同落 pi 的 stderr）。
+        log("人格注入层装载：%s（profile=%s）", p,
+            os.environ.get("DISPATCH_PROFILE") or "（未设 → 解析层按缺省档回落）")
         return ["-e", p]
 
     def spawn_pi(self):

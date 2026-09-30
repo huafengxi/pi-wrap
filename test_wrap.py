@@ -1503,7 +1503,9 @@ def t48_persona_emission():
       a) 注入层在场 ⇒ 恰一个 `-e <loader>`，且**零**人格 flag（--append-system-prompt/--skill/
          -t/-xt/--model/--provider 全部不发）、也不发 context-compaction 的 `-e`（压缩策略的
          env 与执行体装载都归注入层）；
-      b) 输入 env 透传：DISPATCH_PROFILE / AGENTD_RESIDENT / AGENT_ROOT / AGENT_SELF 原样到子进程；
+      b) 输入 env 透传：DISPATCH_PROFILE / AGENTD_RESIDENT / AGENT_ROOT / AGENT_SELF 原样到子进程
+         （人格输入只有 DISPATCH_PROFILE 一枚：会话形态住 profile 清单的 `form` 字段，
+         AGENTD_RESIDENT 只作「常驻标记」= 注入层的监督判据 + 本脚本的完成收敛形态）；
       c) 陈旧的 AGENTD_CONTEXT_COMPACTION 被洗掉（「无策略 = env 不在场」是硬语义，写者是注入层）；
       d) 注入层缺失 ⇒ WARN 点名 + 不注入 + **会话照常收敛 exit 0**（fail-soft：绝不 die，
          硬失败会自锁）、无诊断；
@@ -1525,16 +1527,20 @@ def t48_persona_emission():
            not leaked, leaked)
         ok("T48a 不发 context-compaction 的 -e（压缩策略归注入层）",
            not [a for a in argv if "context-compaction" in a], repr(argv)[:300])
-        ok("T48a 装载行在场（点名 profile 与形态，排障可从 agentd.log 归因）",
-           "人格注入层装载" in err and "profile=review" in err and "form=task" in err,
+        ok("T48a 装载行在场（点名 profile；排障可从 agentd.log 归因）",
+           "人格注入层装载" in err and "profile=review" in err,
            err[-400:])
+        ok("T48a 装载行不再自报形态（形态轴住 profile 的 `form` 字段，由解析层定档后写在"
+           "注入层自己的装配摘要行里）",
+           "form=" not in err, err[-400:])
         ok("T48a 照常收敛 exit 0、无诊断", rc == 0 and e.read_diag() is None, "rc=%s" % rc)
         # ② 输入 env 透传
         pe = e.read_persona_env() or {}
         ok("T48b 输入 env 原样透传（DISPATCH_PROFILE/AGENT_ROOT/AGENT_SELF）",
            pe.get("DISPATCH_PROFILE") == "review" and pe.get("AGENT_ROOT") == e.root
            and pe.get("AGENT_SELF") == e.task_id, json.dumps(pe, ensure_ascii=False))
-        ok("T48b 任务形态不带 AGENTD_RESIDENT（注入层据此判形态）",
+        ok("T48b 任务形态不带 AGENTD_RESIDENT（该 env 只是常驻标记：注入层的监督判据 +"
+           "本脚本的完成收敛形态，⛔ 不是人格形态轴）",
            pe.get("AGENTD_RESIDENT") is None, json.dumps(pe, ensure_ascii=False))
     finally:
         e.cleanup([p])
@@ -1588,7 +1594,8 @@ def t48_persona_emission():
            argv.count(loader) == 1, repr(argv)[:300])
         ok("T48e resident 不注入 CHILD_EXTS（主端扩展由全局装载面发现、与 cwd 无关）",
            not [a for a in argv if "child.ts" in a], repr(argv)[:300])
-        ok("T48e 形态输入透传（AGENTD_RESIDENT=1 + 会话名 ⇒ 注入层不前置基线、不回落）",
+        ok("T48e 常驻标记与会话名原样透传（AGENTD_RESIDENT=1 + AGENTD_SESSION_NAME；人格形态"
+           "不经 env，由 `dispatcher` profile 自己声明的 `form: resident` 定档）",
            pe.get("AGENTD_RESIDENT") == "1" and pe.get("AGENTD_SESSION_NAME") == "bot/t48e"
            and pe.get("DISPATCH_PROFILE") == "dispatcher", json.dumps(pe, ensure_ascii=False))
         ok("T48e 零人格 flag（同任务形态）",

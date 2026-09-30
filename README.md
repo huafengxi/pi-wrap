@@ -88,7 +88,7 @@ Injected by the supervisor (and scrubbed of inherited scheduler identity first):
 | `AGENT_HOME` | this participant's directory (`agents/task/<id>/`, `agents/bot/<name>/`) |
 | `AGENT_SELF` | path-style participant id (`task/<id>`, `bot/<name>`, `topic/<id>`) |
 | `AGENTD_TASK` | recursion guard: set for task-shaped sessions, absent for resident ones |
-| `AGENTD_RESIDENT` | `1` = resident session (no completion convergence) |
+| `AGENTD_RESIDENT` | `1` = resident session (no completion convergence; also one of the injection layer's "agentd-supervised" tests — **not** the persona form axis, which lives in the profile's `form` field) |
 | `AGENTD_SESSION_NAME` | pinned session name for resident spawns |
 | `DISPATCH_PROFILE` | thin profile to assemble (ordered capability list) |
 | `AGENTD_WRAP_*` | per-run overrides: `PI_BIN`, `INIT_OK`, `RECV_ARMED`, `INIT_TIMEOUT`, `ARM_TIMEOUT`, `SETTLE_WINDOW`, `EXIT_GRACE` |
@@ -109,8 +109,8 @@ Assembly is **two layers**, and the merge semantics live in exactly one of them:
   capabilities → structured injection face (ordered prompt parts, skill paths,
   tool allow/deny sets, model + derived provider, normalized compaction policy,
   warnings). Every merge rule and every fail-soft degrade branch is here, and
-  nowhere else. It is also a CLI (`persona.py resolve --root … --form
-  task|resident [--profile …]` → one JSON object on stdout) so an out-of-process
+  nowhere else. It is also a CLI (`persona.py resolve --root … [--profile …]` →
+  one JSON object on stdout) so an out-of-process
   consumer resolves the very same structure instead of re-implementing it.
 - `pi-core/agent/extensions/profile-loader.ts` (main workspace repo) — the
   *injection* layer: a pi extension that calls that CLI once per session and maps
@@ -119,10 +119,14 @@ Assembly is **two layers**, and the merge semantics live in exactly one of them:
   (`setActiveTools`), model (`setModel`), compaction policy (env + loading the
   `context-compaction` unit). It is auto-discovered from `~/.pi/agent/extensions/`,
   so a human can start a persona session with just `pi --persona <profile>`.
-  The **form** still comes from `AGENTD_RESIDENT` (a fact about the session, not
-  part of the persona declaration), so a resident-shaped profile needs
-  `AGENTD_RESIDENT=1 pi --persona <profile>`; without it the task form applies
-  (executor baseline prepended, `ask_user` excluded).
+  The **form** is not an input here: it is the profile manifest's own `form`
+  field (`task|resident|interactive`), read by the resolution layer and echoed
+  back in its output. So `pi --persona <profile>` is enough — a resident-shaped
+  profile assembles as resident without any extra env. Missing/invalid `form`
+  degrades to the strictest tier (`task`) plus a WARN; the commit-time gate is
+  `bots/cap_lint.py` E17. Safety invariants are declared, not implied: a
+  `form: task` profile lists `executor` first in `caps`, and that capability's
+  `cap.yml` declares `excludeTools: [ask_user]` (E17 pins both).
 
 **The wrapper therefore puts no persona data in argv**: the prompt text, knowledge
 list, skill paths, tool sets, model and compaction policy are all injected
@@ -136,9 +140,12 @@ for the persona face is two things (`_persona_ext_argv`):
    order. Pinning it first keeps the persona text ahead of other global extensions'
    appends (e.g. host-info's identity lines). pi de-duplicates by realpath, so the
    same file arriving twice is loaded once — no duplicate flag registration.
-2. pass the two input env vars through untouched (`DISPATCH_PROFILE` = profile
-   name, `AGENTD_RESIDENT` = form), plus `AGENT_ROOT` so the extension can find
-   `persona.py`. The wrapper always *removes* an inherited
+2. pass the one persona input env var through untouched (`DISPATCH_PROFILE` =
+   profile name), plus `AGENT_ROOT` so the extension can find
+   `persona.py`. `AGENTD_RESIDENT` also survives into the child, but only as the
+   *resident marker* (the extension's "is this session agentd-supervised" test and
+   this wrapper's completion-convergence shape) — it is **not** the persona form
+   axis. The wrapper always *removes* an inherited
    `AGENTD_CONTEXT_COMPACTION`: its writer is now the extension, and "no policy ⇒
    env absent" is a hard semantic that must not depend on a clean caller
    environment.
