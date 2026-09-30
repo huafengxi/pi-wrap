@@ -546,12 +546,12 @@ PLANNER_MODEL = "llm-router/planner"            # 生产常驻 profile（dispatc
 
 
 def t29_child_exts():
-    """T29 子端扩展注入面：CHILD_EXTS 三文件在场 → 任务形态 argv 按序
-    注入三个 -e（含 receiver-child = 子任务自家信箱的推送收件面）；文件缺失 → 跳过不拖垮
+    """T29 子端扩展注入面：CHILD_EXTS 两文件在场 → 任务形态 argv 按序
+    注入两个 -e（含 receiver-child = 子任务自家信箱的推送收件面）；文件缺失 → 跳过不拖垮
     会话（既有容错口径）；resident 形态一律不注入（主端 index.ts 由 workdir 的 .pi 自动发现，
     其 receiver 已覆盖自家信箱，再注入只会白占一份 watch/poll）。"""
     rel_dir = os.path.join("assistant", ".pi", "extensions", "agentd")
-    names = ("ask-user-child.ts", "message-child.ts", "receiver-child.ts")
+    names = ("ask-user-child.ts", "receiver-child.ts")
 
     def _mk_exts(e):
         d = os.path.join(e.root, rel_dir)
@@ -561,7 +561,7 @@ def t29_child_exts():
                 f.write("export default function () {}\n")
         return [os.path.join(e.root, rel_dir, n) for n in names]
 
-    # ① 三文件在场 → 任务形态按 CHILD_EXTS 顺序注入（探针扩展不在场 → 不多不少三个）
+    # ① 两文件在场 → 任务形态按 CHILD_EXTS 顺序注入（探针扩展不在场 → 不多不少两个）
     e = Env("t29a")
     want = _mk_exts(e)
     p = e.start_wrap()
@@ -570,7 +570,7 @@ def t29_child_exts():
         e.wait_argv()
         argv = e.read_argv()
         got = [argv[i + 1] for i, x in enumerate(argv or []) if x == "-e"]
-        ok("T29a 任务形态注入子端扩展×3（含 receiver-child，按 CHILD_EXTS 顺序）",
+        ok("T29a 任务形态注入子端扩展×2（含 receiver-child，按 CHILD_EXTS 顺序）",
            got == want, repr(got))
         ok("T29a 注入路径均在场（缺失会被 wrap 静默跳过 = 收件面凭空失效）",
            bool(got) and all(os.path.exists(g) for g in got), repr(got))
@@ -609,8 +609,7 @@ def t29_child_exts():
         e3.cleanup([p3])
 
 
-def _mk_child_exts(e, names=("ask-user-child.ts", "message-child.ts",
-                             "receiver-child.ts")):
+def _mk_child_exts(e, names=("ask-user-child.ts", "receiver-child.ts")):
     """在临时树里造子端扩展文件（wrap 只判存在性 → 桦文件即可）。"""
     d = os.path.join(e.root, "assistant", ".pi", "extensions", "agentd")
     os.makedirs(d, exist_ok=True)
@@ -777,7 +776,7 @@ def t30_ready_handshake():
     # ---- g) receiver-child 缺失 → 不传 env、不等 arm（存量形态零回归）----
     e6 = Env("t30g", fake_mode="child_race",
              extra_env={"FAKE_CHILD_NO_ARM": "1", "AGENTD_WRAP_ARM_TIMEOUT": "1"})
-    _mk_child_exts(e6, names=("ask-user-child.ts", "message-child.ts"))  # 故意缺 receiver
+    _mk_child_exts(e6, names=("ask-user-child.ts",))  # 故意缺 receiver
     p6 = e6.start_wrap()
     try:
         rc6 = p6.wait(timeout=40)
@@ -1491,7 +1490,7 @@ def t48_persona_emission():
                                "AGENTD_SESSION_NAME": "bot/t48e"})
     loader = _mk_loader(e.root)
     rel_dir = os.path.join("assistant", ".pi", "extensions", "agentd")
-    for n in ("ask-user-child.ts", "message-child.ts", "receiver-child.ts"):
+    for n in ("ask-user-child.ts", "receiver-child.ts"):
         fp = os.path.join(e.root, rel_dir, n)
         os.makedirs(os.path.dirname(fp), exist_ok=True)
         with open(fp, "w", encoding="utf-8") as f:

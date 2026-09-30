@@ -79,7 +79,7 @@ skill 路径 / 活动工具集 / 模型 / 压缩策略）。本文件对人格�
 stderr** ⇒ 落 `run/agentd/<name>.stderr.log`（与诊断的 stderr 尾同源），不再在 wrap 自己的日志里；
 会话内取证 = `/persona`。压缩策略 env 的写者也是注入层 ⇒ `spawn_pi` 恒洗掉从宿主继承的同名 env
 （「无策略 = env 不在场」是硬语义，不靠调用方环境干净）。协议层扩展（ask-user-child/
-message-child/receiver-child/探针）仍归调度层注入，与人格装配无关。
+receiver-child/探针）仍归调度层注入，与人格装配无关。
 
 失败域：观测面（accept/转发）异常只断观测不伤收敛主线；未捕获异常兜底写
 诊断后退出 1。本文件只用 python3 标准库（解析层的 pyyaml 依赖与其降级分支见 persona.py）。
@@ -132,7 +132,6 @@ def _env_float(name, default, cap=None):
     return v if v > 0 else default
 CHILD_EXTS = (            # 子端扩展（相对 $AGENT_ROOT，与 core.ts 的 *_REL 常量同源）
     "assistant/.pi/extensions/agentd/ask-user-child.ts",
-    "assistant/.pi/extensions/agentd/message-child.ts",
     # 子任务自家信箱的推送收件面：只收 agents/task/<本任务 id>/inbox（收件面
     # 锁死单点 = core.taskSelfMailbox），按信封 deliver 选 steer/followUp 注入。只进任务形态
     # 分支：resident（bot 型常驻会话）由 workdir 的 .pi 自动发现主端 index.ts，其 receiver 已
