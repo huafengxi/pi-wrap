@@ -89,12 +89,17 @@ class Tree:
                cap_yml if isinstance(cap_yml, str) else _yml(cap_yml))
         return cdir
 
-    def profile(self, name, caps=None, model=None, extra=None, raw=None):
+    def profile(self, name, caps=None, model=None, form=persona.FORM_TASK,
+                extra=None, raw=None):
+        """建 profile 薄清单。`form` = 会话形态轴的**声明落点**（缺省写 task 档，与改前
+        `Tree.resolve(form=FORM_TASK)` 的缺省一致）；`form=None` = 显式不声明该键（造漏声明面）。"""
         p = os.path.join(self.root, "bots", "profiles", name + ".json")
         if raw is not None:
             return _w(p, raw)
-        doc = {"name": name, "summary": "test profile %s" % name,
-               "caps": list(caps) if caps is not None else [name]}
+        doc = {"name": name, "summary": "test profile %s" % name}
+        if form is not None:
+            doc["form"] = form
+        doc["caps"] = list(caps) if caps is not None else [name]
         if model is not None:
             doc["model"] = model
         if extra:
@@ -138,13 +143,13 @@ class Tree:
                 "desk": os.path.join(lore, "desk", "me"),
                 "archive": os.path.join(lore, "archive")}
 
-    def resolve(self, form=persona.FORM_TASK, profile=None, env=None):
+    def resolve(self, profile=None, env=None):
+        """一次解析（形态不由调用方给：它是 profile 清单的 `form` 字段）。"""
         saved = {k: os.environ.get(k) for k in ("DISPATCH_PROFILE",)}
         if env:
             os.environ.update(env)
         try:
-            return persona.resolve(self.root, form=form, profile=profile,
-                                   emit=self.emit)
+            return persona.resolve(self.root, profile=profile, emit=self.emit)
         finally:
             for k, v in saved.items():
                 if v is None:
@@ -179,22 +184,31 @@ def p1_contract():
            r["appendJoiner"] == "\n\n", repr(r["appendJoiner"]))
         ok("P1d JSON 可序列化（扩展侧读的就是这个）",
            json.loads(json.dumps(r, ensure_ascii=False))["profile"] == "executor")
-        ok("P1e form 原样回带", r["form"] == persona.FORM_TASK, r["form"])
-        ok("P1f 非法 form 是编程错误 ⇒ ValueError（不静默降级）",
-           _raises_value_error(t))
+        ok("P1e form 来自 profile 声明并原样回带（不再由调用方传入）",
+           r["form"] == persona.FORM_TASK, r["form"])
+        t.profile("res", caps=["executor"], model="p/m", form=persona.FORM_RESIDENT)
+        t.profile("itr", caps=[], model="p/m", form=persona.FORM_INTERACTIVE)
+        ok("P1f 三档值域均可解析并原样回带（task/resident/interactive）",
+           [t.resolve(profile=n)["form"] for n in ("executor", "res", "itr")]
+           == [persona.FORM_TASK, persona.FORM_RESIDENT, persona.FORM_INTERACTIVE],
+           [t.resolve(profile=n)["form"] for n in ("executor", "res", "itr")])
+        t.profile("bad", caps=["executor"], model="p/m", form="nope")
+        rb = t.resolve(profile="bad")
+        ok("P1g 声明非法 form ⇒ WARN 点名三档 + 缺省最严档 task（fail-soft，绝不 die）",
+           rb["form"] == persona.FORM_TASK
+           and any("值非法" in w and "task|resident|interactive" in w for w in rb["warnings"]),
+           json.dumps(rb["warnings"], ensure_ascii=False)[:400])
+        t.profile("noform", caps=["executor"], model="p/m", form=None)
+        rn = t.resolve(profile="noform")
+        ok("P1h 漏声明 form ⇒ WARN 点名提交期判据（cap_lint E17）+ 缺省最严档 task",
+           rn["form"] == persona.FORM_TASK
+           and any("未声明" in w and "E17" in w for w in rn["warnings"]),
+           json.dumps(rn["warnings"], ensure_ascii=False)[:400])
     finally:
         t.cleanup()
 
 
-def _raises_value_error(t):
-    try:
-        persona.Resolver(t.root, form="nope")
-        return False
-    except ValueError:
-        return True
-
-
-# ---------- P2 caps 展开序 / 基线前置 / 去重 ----------
+# ---------- P2 caps 展开序（= 声明序）/ 去重 ----------
 
 def p2_caps():
     t = Tree("p2")
@@ -203,20 +217,30 @@ def p2_caps():
         t.cap("review", CAP_TEXT)
         t.profile("review", caps=["review", "executor"], model="p/m")
         r = t.resolve(profile="review")
-        ok("P2a 任务形态：基线能力被提到首位并去重",
-           r["caps"] == ["executor", "review"], r["caps"])
-        ok("P2b 注入序 = caps 序（正文逐字、不改一个字节）",
-           r["appendParts"] == [EXEC_TEXT, CAP_TEXT], [len(x) for x in r["appendParts"]])
+        ok("P2a caps = 声明序原样（装配器不再按形态重排/前置；基线在首位是声明面的事，"
+           "提交期判据 = cap_lint E17）",
+           r["caps"] == ["review", "executor"], r["caps"])
+        ok("P2b 注入序 = caps 声明序（正文逐字、不改一个字节）",
+           r["appendParts"] == [CAP_TEXT, EXEC_TEXT], [len(x) for x in r["appendParts"]])
         ok("P2c promptStats 与正文一一对应",
-           r["promptStats"] == [{"cap": "executor", "chars": len(EXEC_TEXT)},
-                                {"cap": "review", "chars": len(CAP_TEXT)}],
+           r["promptStats"] == [{"cap": "review", "chars": len(CAP_TEXT)},
+                                {"cap": "executor", "chars": len(EXEC_TEXT)}],
            r["promptStats"])
-        ok("P2d 非首位声明有 WARN（作者意图与「基线恒首」不一致）",
-           any("非首位" in w for w in r["warnings"]), r["warnings"])
-        rr = t.resolve(form=persona.FORM_RESIDENT, profile="review")
-        ok("P2e resident 形态不前置基线、按 caps 序原样",
-           rr["caps"] == ["review", "executor"], rr["caps"])
-        ok("P2f resident 形态无基线排除集", rr["excludeTools"] == [], rr["excludeTools"])
+        ok("P2d 无「非首位」类形态硬规则 WARN（前置已搬进声明面）",
+           not any("非首位" in w for w in r["warnings"]), r["warnings"])
+        t.profile("review-res", caps=["review", "executor"], model="p/m",
+                  form=persona.FORM_RESIDENT)
+        rr = t.resolve(profile="review-res")
+        ok("P2e resident 档同样按声明序原样（形态不派生能力面）",
+           rr["caps"] == ["review", "executor"] and rr["form"] == persona.FORM_RESIDENT,
+           (rr["caps"], rr["form"]))
+        ok("P2f 排除集只来自能力声明（本夹具的能力都未声明 ⇒ 空）",
+           rr["excludeTools"] == [], rr["excludeTools"])
+        t.profile("review-dup", caps=["review", "executor", "review"], model="p/m")
+        rd = t.resolve(profile="review-dup")
+        ok("P2g 能力名重复 ⇒ 去重保序 + WARN（与形态无关）",
+           rd["caps"] == ["review", "executor"]
+           and any("重复" in w for w in rd["warnings"]), rd["caps"])
     finally:
         t.cleanup()
 
@@ -226,7 +250,7 @@ def p2b_bundle_and_missing():
     try:
         t.cap("executor", EXEC_TEXT)
         t.cap("kit", prompt_text=None, cap_yml={"summary": "bundle"})
-        t.profile("p", caps=["kit", "ghost"], model="p/m")
+        t.profile("p", caps=["executor", "kit", "ghost"], model="p/m")
         r = t.resolve(profile="p")
         ok("P2g bundle 能力（无正文）合法 ⇒ 不进 appendParts、不刷 WARN",
            r["appendParts"] == [EXEC_TEXT]
@@ -241,31 +265,39 @@ def p2b_bundle_and_missing():
         t.cleanup()
 
 
-# ---------- P3 回落与形态基线 ----------
+# ---------- P3 回落（task 档无形态声明可读时的缺省面） ----------
 
 def p3_fallback():
     t = Tree("p3")
     try:
-        t.cap("executor", EXEC_TEXT)
+        t.cap("executor", EXEC_TEXT, cap_yml={"excludeTools": ["ask_user"]})
         t.profile("executor", caps=["executor"], model="llm-router/executor")
         r = t.resolve(profile="")            # 未设
-        ok("P3a 任务形态未设 profile ⇒ 回落 executor profile（缺省模型角色档）",
+        ok("P3a 未设 profile 名 ⇒ 缺省最严档 task + 回落 executor profile（缺省模型角色档）",
            r["fallback"] is True and r["profile"] == "executor"
-           and r["model"] == "llm-router/executor", (r["fallback"], r["profile"], r["model"]))
-        ok("P3b 回落面 caps 与「只前置基线」逐字一致",
+           and r["form"] == persona.FORM_TASK
+           and r["model"] == "llm-router/executor",
+           (r["fallback"], r["profile"], r["form"], r["model"]))
+        ok("P3b 回落面注入面 = 回落 profile 的声明面（同一条解析路径，不另写平行分支）",
            r["caps"] == ["executor"] and r["appendParts"] == [EXEC_TEXT], r["caps"])
-        ok("P3c 任务形态排除集恒含形态基线 ask_user",
-           r["excludeTools"] == ["ask_user"], r["excludeTools"])
-        rr = t.resolve(form=persona.FORM_RESIDENT, profile="")
-        ok("P3d resident 形态不回落 ⇒ 裸启动面（caps 空、注入面空）",
-           rr["fallback"] is False and rr["caps"] == [] and rr["appendParts"] == []
-           and rr["model"] is None and rr["excludeTools"] == [],
-           json.dumps({k: rr[k] for k in ("caps", "appendParts", "model", "excludeTools")},
+        ok("P3c 排除集来自能力声明（caps/executor 的 excludeTools）而非形态基线",
+           r["excludeTools"] == ["ask_user"]
+           and not any("形态基线" in w for w in r["warnings"]), r["excludeTools"])
+        t.profile("res-empty", caps=[], model=None, form=persona.FORM_RESIDENT)
+        rr = t.resolve(profile="res-empty")
+        ok("P3d 显式声明 resident 档 ⇒ 不回落（有名字就无从读不到形态）+ 裸启动面",
+           rr["fallback"] is False and rr["form"] == persona.FORM_RESIDENT
+           and rr["caps"] == [] and rr["appendParts"] == [] and rr["model"] is None
+           and rr["excludeTools"] == [],
+           json.dumps({k: rr[k] for k in ("form", "caps", "appendParts", "model", "excludeTools")},
                       ensure_ascii=False))
         r2 = t.resolve(profile="ghost")
-        ok("P3e 显式合法名但清单缺失 ⇒ 不回落（缺失属降级而非未设）+ 仍前置基线",
-           r2["fallback"] is False and r2["profile"] == "ghost" and r2["caps"] == ["executor"]
-           and r2["model"] is None, (r2["fallback"], r2["caps"], r2["model"]))
+        ok("P3e 显式合法名但清单缺失 ⇒ 不回落（缺失属降级而非未设）、注入面为空 + WARN 点名人格面缺席"
+           "（改前该路径仍被装配器硬规则前置基线能力；现按 d-p8bo A 只靠声明面 + lint 兜）",
+           r2["fallback"] is False and r2["profile"] == "ghost" and r2["caps"] == []
+           and r2["appendParts"] == [] and r2["model"] is None
+           and any("不存在" in w for w in r2["warnings"]),
+           (r2["fallback"], r2["caps"], json.dumps(r2["warnings"], ensure_ascii=False)[:300]))
         r3 = t.resolve(profile="a,b")
         ok("P3f 已退役链式写法 ⇒ WARN 点名成因 + 按未设处置（走回落）",
            any("已退役的链式写法" in w for w in r3["warnings"]) and r3["fallback"] is True,
@@ -284,7 +316,7 @@ def p4_knowledge():
     try:
         t.cap("executor", EXEC_TEXT)
         t.cap("dom", CAP_TEXT, cap_yml={"knowledge": ["library/x", "desk/y"]})
-        t.profile("p", caps=["dom"], model="p/m")
+        t.profile("p", caps=["executor", "dom"], model="p/m")
         r = t.resolve(profile="p")
         ok("P4a kb 工具缺失 ⇒ 降级：块不注入、WARN 点名根因、正文照常",
            r["appendParts"] == [EXEC_TEXT, CAP_TEXT]
@@ -319,16 +351,21 @@ def p5_tools():
     try:
         t.cap("executor", EXEC_TEXT, cap_yml={"excludeTools": ["web_search"]})
         t.cap("rev", CAP_TEXT, cap_yml={"tools": ["read", "bash", "web_search"]})
-        t.profile("p", caps=["rev"], model="p/m")
+        t.profile("p", caps=["executor", "rev"], model="p/m")
         r = t.resolve(profile="p")
         ok("P5a tools = 声明者并集（去重保序）", r["tools"] == ["read", "bash", "web_search"],
            r["tools"])
-        ok("P5b excludeTools = 形态基线 ∪ 声明者（基线恒在）",
-           r["excludeTools"] == ["ask_user", "web_search"], r["excludeTools"])
+        ok("P5b excludeTools = 声明者并集（无形态基线参与；本例只有 executor 能力声明了它）",
+           r["excludeTools"] == ["web_search"], r["excludeTools"])
         ok("P5c 白名单项被排除集命中 ⇒ WARN 不阻断",
            any("被排除集命中" in w and "web_search" in w for w in r["warnings"]), r["warnings"])
+        t.profile("p-noxt", caps=["rev"], model="p/m")
+        rn = t.resolve(profile="p-noxt")
+        ok("P5e task 档也不派生任何形态基线排除集（无人声明 ⇒ 空，安全面只住声明）",
+           rn["form"] == persona.FORM_TASK and rn["excludeTools"] == [],
+           (rn["form"], rn["excludeTools"]))
         t.cap("bad", CAP_TEXT, cap_yml={"tools": ["read,bash", 7]})
-        t.profile("q", caps=["bad"], model="p/m")
+        t.profile("q", caps=["executor", "bad"], model="p/m")
         rq = t.resolve(profile="q")
         ok("P5d 内嵌逗号元素拒绝 + 非字符串元素跳过（两条 WARN）",
            any("内嵌逗号" in w for w in rq["warnings"])
@@ -450,8 +487,10 @@ def p9_cc():
         ok("P9f 策略非法 ⇒ WARN 点名不可达面 + 不装配（会话照起）",
            r3["contextCompaction"] is None
            and any("keepRecentTokens" in w for w in r3["warnings"]), r3["warnings"])
-        rr = t.resolve(form=persona.FORM_RESIDENT, profile="p")
-        ok("P9g resident 形态同等装配（策略住 profile、与形态无关）",
+        t.profile("p-res", caps=["executor"], model="p/m", form=persona.FORM_RESIDENT,
+                  extra={"contextCompaction": {"triggerRatio": 0.5}})
+        rr = t.resolve(profile="p-res")
+        ok("P9g resident 档同等装配（策略住 profile、与形态无关）",
            rr["contextCompactionExt"] == ext, rr["contextCompactionExt"])
     finally:
         t.cleanup()
@@ -491,7 +530,7 @@ def p11_equivalence():
         t.cap("executor", EXEC_TEXT)
         t.cap("a", "# a\n")
         t.cap("b", "# b\n")
-        t.profile("p", caps=["a", "b"], model="p/m")
+        t.profile("p", caps=["executor", "a", "b"], model="p/m")
         r = t.resolve(profile="p")
         j = r["appendJoiner"]
         argv_form = j.join(r["appendParts"])          # pi 对多个 --append-system-prompt 的拼接
@@ -501,7 +540,7 @@ def p11_equivalence():
         ok("P11b 追加段 = 基础提示之后以 joiner 相接（前缀语义由 pi 侧承担，此处钉分隔符）",
            ("BASE" + j + argv_form) == "BASE\n\n" + EXEC_TEXT + "\n\n# a\n\n\n# b\n",
            repr("BASE" + j + argv_form))
-        ok("P11c parts 序 = caps 展开序（基线在首）",
+        ok("P11c parts 序 = caps 声明序（基线在首是声明面的事，不是装配器重排的结果）",
            r["caps"] == ["executor", "a", "b"], r["caps"])
     finally:
         t.cleanup()
@@ -522,7 +561,7 @@ def p12_cli():
                                   capture_output=True, text=True,
                                   env=e if e is not None else env, timeout=60)
 
-        r = run(["resolve", "--root", t.root, "--form", "task", "--profile", "p"])
+        r = run(["resolve", "--root", t.root, "--profile", "p"])
         d = json.loads(r.stdout)
         ok("P12a rc=0 且 stdout 是**单个** JSON 对象（告警走 stderr）",
            r.returncode == 0 and set(d.keys()) == SCHEMA_KEYS and r.stdout.count("\n") == 1,
@@ -530,13 +569,14 @@ def p12_cli():
         ok("P12b 注入面与进程内解析逐字一致",
            d["appendParts"] == [EXEC_TEXT] and d["model"] == "llm-router/executor",
            d["appendParts"])
-        rc = run(["resolve", "--root", t.root, "--form", "task", "--profile", "ghost"])
+        rc = run(["resolve", "--root", t.root, "--profile", "ghost"])
         ok("P12c 清单缺失仍 rc=0（fail-soft 是硬要求）+ warnings 非空",
            rc.returncode == 0 and json.loads(rc.stdout)["warnings"], (rc.returncode, rc.stdout[:200]))
-        rr = run(["resolve", "--root", t.root, "--form", "resident"],
-                 e={k: v for k, v in env.items() if k != "DISPATCH_PROFILE"})
+        rr = run(["resolve", "--root", t.root],
+                 e=dict({k: v for k, v in env.items() if k != "DISPATCH_PROFILE"},
+                        DISPATCH_PROFILE="p"))
         ok("P12d --profile 缺省 = 读 env DISPATCH_PROFILE（两个输入口等价）",
-           json.loads(rr.stdout)["caps"] == [] and rr.returncode == 0, rr.stdout[:200])
+           json.loads(rr.stdout)["caps"] == d["caps"] and rr.returncode == 0, rr.stdout[:200])
         re_ = run(["resolve", "--root", t.root, "--profile", "p"],
                   e=dict(env, DISPATCH_PROFILE="p"))
         ok("P12e env 形态与 flag 形态产出同一注入面",
@@ -546,7 +586,7 @@ def p12_cli():
            " " not in rc2.stdout.split("\n")[0][:40]
            and json.loads(rc2.stdout) == d, rc2.stdout[:120])
         e = {k: v for k, v in env.items() if k != "AGENT_ROOT"}
-        rc3 = run(["resolve", "--form", "task"], e=e)
+        rc3 = run(["resolve"], e=e)
         ok("P12g 无 --root 且无 AGENT_ROOT ⇒ rc=2 + FATAL 到 stderr（用法错误不静默）",
            rc3.returncode == 2 and "FATAL" in rc3.stderr, (rc3.returncode, rc3.stderr[:200]))
         rc4 = run(["resolve", "--root", "/nonexistent/root/xyz", "--profile", "p"])
@@ -555,11 +595,21 @@ def p12_cli():
            (rc4.returncode, rc4.stdout[:200], rc4.stderr[:200]))
         rc5 = run(["nosuchcmd"])
         ok("P12i 未知子命令 ⇒ argparse 拒（rc≠0）", rc5.returncode != 0, rc5.returncode)
+        rc6 = run(["resolve", "--root", t.root, "--form", "task", "--profile", "p"])
+        ok("P12j `--form` 已退役（形态住 profile 的 `form` 字段）⇒ argparse 拒 rc=2",
+           rc6.returncode == 2 and "--form" in rc6.stderr,
+           (rc6.returncode, rc6.stderr[:200]))
     finally:
         t.cleanup()
 
 
 # ---------- P13 真实资产面（在场则核，不在场跳过） ----------
+
+# 现网形态映射（验收面：本批把形态轴收进 profile 的逐枚落点）；名单外的 profile 只核通用判据。
+REAL_FORMS = {"executor": persona.FORM_TASK, "review": persona.FORM_TASK,
+              "dispatcher": persona.FORM_RESIDENT, "moderator": persona.FORM_RESIDENT,
+              "agentfw-lead": persona.FORM_RESIDENT, "work-lead": persona.FORM_RESIDENT}
+
 
 def p13_real_assets():
     ws = os.path.normpath(os.path.join(HERE, ".."))
@@ -568,15 +618,29 @@ def p13_real_assets():
         return
     names = sorted(f[:-5] for f in os.listdir(os.path.join(ws, "bots", "profiles"))
                    if f.endswith(".json"))
-    bad = []
+    bad, forms = [], {}
     for n in names:
-        for form in (persona.FORM_TASK, persona.FORM_RESIDENT):
-            r = persona.resolve(ws, form=form, profile=n, emit=lambda *a: None)
-            if r["schemaVersion"] != 1 or not r["caps"] or not r["appendParts"]:
-                bad.append((n, form, r["caps"]))
-            if r["appendParts"] and any(not p.strip() for p in r["appendParts"]):
-                bad.append((n, form, "空正文"))
-    ok("P13 现网全部 profile × 两形态解析成功且注入面非空（%d 个 profile）" % len(names),
+        r = persona.resolve(ws, profile=n, emit=lambda *a: None)
+        forms[n] = r["form"]
+        if r["schemaVersion"] != 1 or not r["caps"] or not r["appendParts"]:
+            bad.append((n, r["form"], r["caps"]))
+        if r["appendParts"] and any(not p.strip() for p in r["appendParts"]):
+            bad.append((n, r["form"], "空正文"))
+        if r["form"] not in persona.FORMS:
+            bad.append((n, r["form"], "form 不在三档值域"))
+        if n in REAL_FORMS and r["form"] != REAL_FORMS[n]:
+            bad.append((n, r["form"], "现网映射期望 %s" % REAL_FORMS[n]))
+        if r["form"] == persona.FORM_TASK:
+            # 安全不变量（声明面承担、cap_lint E17 提交期兜）：基线能力在首位 ∧ 排除 ask_user
+            if r["caps"][0] != "executor":
+                bad.append((n, r["form"], "caps 首位非 executor：%s" % r["caps"]))
+            if "ask_user" not in r["excludeTools"]:
+                bad.append((n, r["form"], "excludeTools 漏 ask_user：%s" % r["excludeTools"]))
+        else:
+            if r["fallback"]:
+                bad.append((n, r["form"], "非 task 档却走了回落"))
+    ok("P13 现网全部 profile 解析成功、注入面非空、form 声明与现网映射逐枚相符"
+       "（%d 个 profile：%s）" % (len(names), json.dumps(forms, ensure_ascii=False)),
        not bad, bad)
 
 
@@ -595,7 +659,8 @@ def p14_knowledge_tiers():
     def mk(tag, knowledge, with_lore=True, extra_dirs=()):
         t = Tree(tag)
         t.cap("mod", PT, cap_yml={"knowledge": list(knowledge)})
-        t.profile("mod", caps=["mod"], model="p/m")
+        t.profile("mod", caps=["mod"], model="p/m",
+                    form=persona.FORM_RESIDENT)
         d = t.lore_fixture(with_lore=with_lore)
         for rel, docs in extra_dirs:
             t.kb(rel, docs, copy_tool=False)
@@ -604,7 +669,7 @@ def p14_knowledge_tiers():
     # g) 三档各一节
     t, d = mk("p14g", ["library/dom", "desk/me", "archive"])
     try:
-        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        r = t.resolve(profile="mod")
         blk = r["appendParts"][1] if len(r["appendParts"]) == 2 else ""
         ok("P14g 清单块顶在能力正文之后（末位）",
            len(r["appendParts"]) == 2 and r["appendParts"][0] == PT, repr(r["appendParts"])[:200])
@@ -635,7 +700,7 @@ def p14_knowledge_tiers():
     # h) 名不可解析 ⇒ 一行降级说明进块（不静默）
     t, d = mk("p14h", ["library/ghost", "desk/me"])
     try:
-        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        r = t.resolve(profile="mod")
         blk = r["appendParts"][1] if len(r["appendParts"]) == 2 else ""
         ok("P14h 名不可解析 ⇒ 块内一行降级说明 + 可解析面照常",
            "不可解析" in blk and "library/ghost" in blk and "### 书桌 `desk/me`" in blk, blk[:400])
@@ -645,7 +710,7 @@ def p14_knowledge_tiers():
     # i) lore 根不在场 ⇒ WARN 点名根因、解析不抛
     t, d = mk("p14i", ["library/dom"], with_lore=False)
     try:
-        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        r = t.resolve(profile="mod")
         blk = r["appendParts"][1] if len(r["appendParts"]) == 2 else ""
         ok("P14i lore 根不在场 ⇒ WARN 点名根因 + 块内降级说明（不拖垮）",
            any("lore 仓根不在场" in w for w in r["warnings"]) and "不可解析" in blk,
@@ -658,7 +723,7 @@ def p14_knowledge_tiers():
     t, d = mk("p14j", ["library/dom", "kb/legacy"],
               extra_dirs=[(os.path.join("kb", "legacy"), [("l.md", "legacy 册何时读")])])
     try:
-        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        r = t.resolve(profile="mod")
         blk = r["appendParts"][1] if len(r["appendParts"]) == 2 else ""
         ok("P14j 两档混存 ⇒ 各一节且顺序照声明（lore 档在前）",
            "### 知识库 `library/dom`" in blk and blk.index("### 知识库") < blk.index("### 域 ")
@@ -673,7 +738,7 @@ def p14_knowledge_tiers():
     # k) 名含 `..` ⇒ 拒绝、注入面只有能力正文
     t, d = mk("p14k", ["../evil"])
     try:
-        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        r = t.resolve(profile="mod")
         ok("P14k 名含 `..` ⇒ WARN 拒绝、注入面只有能力正文",
            r["appendParts"] == [PT] and any("`..` 路径段" in w for w in r["warnings"]),
            json.dumps(r["warnings"], ensure_ascii=False)[:300])
@@ -689,7 +754,7 @@ def p14_knowledge_tiers():
             if payload is None:
                 payload = json.dumps({"version": -1, "root": t.root, "docs": {}})
             _w(os.path.join(cdir, "names.json"), payload)
-            r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+            r = t.resolve(profile="mod")
             blk = r["appendParts"][1] if len(r["appendParts"]) == 2 else ""
             ok("P14l 名表缓存%s ⇒ 三档清单仍完整（注入链路不读缓存）" % label,
                "### 知识库 `library/dom`" in blk and "### 书桌 `desk/me`" in blk
@@ -702,9 +767,10 @@ def p14_knowledge_tiers():
     t = Tree("p14m")
     try:
         t.cap("mod", PT, cap_yml={"summary": "no knowledge"})
-        t.profile("mod", caps=["mod"], model="p/m")
+        t.profile("mod", caps=["mod"], model="p/m",
+                    form=persona.FORM_RESIDENT)
         t.lore_fixture()
-        r = t.resolve(form=persona.FORM_RESIDENT, profile="mod")
+        r = t.resolve(profile="mod")
         ok("P14m 无 knowledge 声明 ⇒ 只有能力正文、无清单相关日志/告警",
            r["appendParts"] == [PT] and not any("knowledge" in l for l in t.lines),
            json.dumps(t.lines, ensure_ascii=False)[:300])
@@ -717,7 +783,7 @@ def p14_knowledge_tiers():
 def p15_profile_banned_fields():
     t = Tree("p15")
     try:
-        t.cap("executor", EXEC_TEXT)
+        t.cap("executor", EXEC_TEXT, cap_yml={"excludeTools": ["ask_user"]})
         t.profile("p", caps=["executor"], model="p/m", extra={
             "skills": ["s"], "extensions": ["e"], "knowledge": ["library/x"],
             "tools": ["read"], "excludeTools": ["bash"]})
@@ -732,13 +798,15 @@ def p15_profile_banned_fields():
            json.dumps({k: r[k] for k in ("tools", "skillPaths", "excludeTools")}, ensure_ascii=False))
         t.profile("q", raw="{not json")
         rq = t.resolve(profile="q")
-        ok("P15c 清单损坏 ⇒ WARN 跳过、任务形态仍前置基线能力",
-           rq["appendParts"] == [EXEC_TEXT] and any("不可读/损坏" in w for w in rq["warnings"]),
-           rq["warnings"])
+        ok("P15c 清单损坏 ⇒ WARN 跳过 + 注入面为空（人格面缺席，会话裸起；形态无从读起 ⇒ 缺省档）",
+           rq["appendParts"] == [] and rq["caps"] == []
+           and rq["form"] == persona.FORM_TASK
+           and any("不可读/损坏" in w for w in rq["warnings"]),
+           json.dumps(rq["warnings"], ensure_ascii=False)[:300])
         t.profile("r", raw="[1,2]")
         rr = t.resolve(profile="r")
-        ok("P15d 清单顶层非对象 ⇒ WARN 跳过、基线能力照常",
-           rr["appendParts"] == [EXEC_TEXT] and any("顶层非对象" in w for w in rr["warnings"]),
+        ok("P15d 清单顶层非对象 ⇒ WARN 跳过 + 注入面为空（同 P15c 口径）",
+           rr["appendParts"] == [] and any("顶层非对象" in w for w in rr["warnings"]),
            rr["warnings"])
     finally:
         t.cleanup()
@@ -752,14 +820,14 @@ def p16_cap_degradation():
         t.cap("executor", EXEC_TEXT)
         # ① 无 cap.yml = 纯正文能力
         t.cap("plain", CAP_TEXT, cap_yml=None)
-        t.profile("p1", caps=["plain"], model="p/m")
+        t.profile("p1", caps=["executor", "plain"], model="p/m")
         r = t.resolve(profile="p1")
         ok("P16a 无 cap.yml ⇒ WARN 点名「按纯正文能力处理」+ 正文照注",
            r["appendParts"] == [EXEC_TEXT, CAP_TEXT]
            and any("纯正文能力" in w for w in r["warnings"]), r["warnings"])
         # ② cap.yml 损坏 ⇒ 跳过该能力（含正文）
         t.cap("broken", CAP_TEXT, cap_yml="a: [1, 2\nb: }{")
-        t.profile("p2", caps=["broken"], model="p/m")
+        t.profile("p2", caps=["executor", "broken"], model="p/m")
         r2 = t.resolve(profile="p2")
         ok("P16b cap.yml 解析失败 ⇒ 跳过该能力（含正文注入）+ WARN",
            r2["appendParts"] == [EXEC_TEXT]
@@ -767,7 +835,7 @@ def p16_cap_degradation():
            json.dumps(r2["warnings"], ensure_ascii=False)[:400])
         # ③ 顶层非 mapping
         t.cap("seq", CAP_TEXT, cap_yml="- a\n- b\n")
-        t.profile("p3", caps=["seq"], model="p/m")
+        t.profile("p3", caps=["executor", "seq"], model="p/m")
         r3 = t.resolve(profile="p3")
         ok("P16c cap.yml 顶层非 mapping ⇒ 跳过该能力 + WARN",
            r3["appendParts"] == [EXEC_TEXT]
@@ -787,7 +855,7 @@ def p16_cap_degradation():
             t2.cleanup()
         # ⑤ 能力层禁键（caps / model / 未知键）⇒ WARN 忽略该键、不展开
         t.cap("evil", CAP_TEXT, cap_yml={"caps": ["executor"], "model": "x/y", "nope": 1})
-        t.profile("p5", caps=["evil"], model="p/m")
+        t.profile("p5", caps=["executor", "evil"], model="p/m")
         r5 = t.resolve(profile="p5")
         ok("P16e 能力层三个禁键各一条 WARN（点名合法键闭合集）且不生效",
            sum(1 for w in r5["warnings"] if "非法键" in w) == 3
@@ -805,11 +873,65 @@ def p16_cap_degradation():
         t.cleanup()
 
 
+# ---------- P17 形态轴收进 profile 后的安全不变量（声明面承担） ----------
+
+def p17_form_axis():
+    """形态轴从 env 收进 profile 的 `form` 字段后，安全不变量的承担方从装配器硬规则
+    变成声明面（用户裁定 d-p8bo A：只靠 lint、不保留装配器硬规则）⇒ 本族钉三件事：
+      ① 声明齐备时不变量成立（基线能力在首位 ∧ ask_user 被排除）；
+      ② 漏声明时**解析层不补**（fail-soft：只 WARN、注入面就没有它；提交期由
+         `bots/cap_lint.py` 的 E17 报 ERROR 兜死，钉桩在 `bots/test_cap_lint.py`）；
+      ③ 三档均不派生能力面/工具面，形态只影响回落闸（interactive 档 = D 批 command-center 的落点）。"""
+    t = Tree("p17")
+    try:
+        t.cap("executor", EXEC_TEXT, cap_yml={"excludeTools": ["ask_user"]})
+        t.cap("role", CAP_TEXT, cap_yml={"summary": "role face"})
+        t.profile("good", caps=["executor", "role"], model="p/m", form=persona.FORM_TASK)
+        r = t.resolve(profile="good")
+        ok("P17a task 档声明齐备 ⇒ 基线能力在 caps 首位 ∧ ask_user 在排除集（两条不变量）",
+           r["form"] == persona.FORM_TASK and r["caps"][0] == "executor"
+           and "ask_user" in r["excludeTools"] and r["appendParts"][0] == EXEC_TEXT,
+           json.dumps({k: r[k] for k in ("form", "caps", "excludeTools")}, ensure_ascii=False))
+        t.profile("miss", caps=["role"], model="p/m", form=persona.FORM_TASK)
+        rm = t.resolve(profile="miss")
+        ok("P17b task 档漏列基线能力 ⇒ 解析层**不补**（只 WARN、不 die；提交期判据 = cap_lint E17）",
+           rm["caps"] == ["role"] and rm["appendParts"] == [CAP_TEXT]
+           and rm["excludeTools"] == [] and rm["warnings"] == [],
+           json.dumps({"caps": rm["caps"], "xt": rm["excludeTools"],
+                       "w": rm["warnings"]}, ensure_ascii=False))
+        t.profile("itr", caps=["role"], model="p/planner", form=persona.FORM_INTERACTIVE)
+        ri = t.resolve(profile="itr")
+        ok("P17c interactive 档：不前置基线、不排除 ask_user、不回落（model 照给）",
+           ri["form"] == persona.FORM_INTERACTIVE and ri["caps"] == ["role"]
+           and ri["excludeTools"] == [] and ri["fallback"] is False
+           and ri["model"] == "p/planner",
+           json.dumps({k: ri[k] for k in ("form", "caps", "excludeTools", "fallback", "model")},
+                      ensure_ascii=False))
+        t.profile("itr-empty", caps=[], model="p/planner", form=persona.FORM_INTERACTIVE)
+        re_ = t.resolve(profile="itr-empty")
+        ok("P17d interactive 档零 cap 是合法形态（D 批 command-center 的起步形）："
+           "注入面只有 model、无正文无工具面变动",
+           re_["caps"] == [] and re_["appendParts"] == [] and re_["tools"] == []
+           and re_["excludeTools"] == [] and re_["model"] == "p/planner",
+           json.dumps({k: re_[k] for k in ("caps", "appendParts", "tools", "excludeTools")},
+                      ensure_ascii=False)[:300])
+        ok("P17e 三档值域与缺省档常量（跨仓契约：cap_lint.FORMS 同值）",
+           persona.FORMS == ("task", "resident", "interactive")
+           and persona.FORM_DEFAULT == persona.FORM_TASK and persona.FORM_FIELD == "form",
+           (persona.FORMS, persona.FORM_DEFAULT, persona.FORM_FIELD))
+        ok("P17f 解析层已无形态基线常量（TASK_BASELINE_CAP / FORM_XT_BASELINE 退役）",
+           not hasattr(persona, "TASK_BASELINE_CAP")
+           and not hasattr(persona, "FORM_XT_BASELINE"),
+           [n for n in ("TASK_BASELINE_CAP", "FORM_XT_BASELINE") if hasattr(persona, n)])
+    finally:
+        t.cleanup()
+
+
 def main():
     for fn in (p1_contract, p2_caps, p2b_bundle_and_missing, p3_fallback, p4_knowledge,
                p5_tools, p6_bundles, p8_provider, p9_cc, p10_warnings, p11_equivalence,
                p12_cli, p13_real_assets, p14_knowledge_tiers,
-               p15_profile_banned_fields, p16_cap_degradation):
+               p15_profile_banned_fields, p16_cap_degradation, p17_form_axis):
         print("---- %s" % fn.__name__)
         fn()
     print("==== persona 单测：%d passed, %d failed" % (PASS, FAIL))

@@ -11,9 +11,12 @@
 
 CLI（扩展侧 `execFileSync` 调用；**stdout = 一个 JSON 对象**，告警/摘要进 stderr）：
 
-    python3 persona.py resolve --root <ws> --form task|resident [--profile <名>]
+    python3 persona.py resolve --root <ws> [--profile <名>]
 
 `--profile` 缺省 = 读 env `DISPATCH_PROFILE`（两个输入口等价，flag 优先）。
+**会话形态不由调用方给**：它是 profile 清单的 `form` 字段（三档 `task|resident|interactive`），
+由本层在解析期读出并回写进输出（未声明/非法/无 profile ⇒ 缺省最严档 `task` + WARN，
+提交期判据 = `bots/cap_lint.py` 的 E17）。
 **退出码恒 0**（fail-soft 是硬要求）：解析面任何缺失/损坏/非法一律降级为 `warnings[]` 项，
 绝不 die——硬失败会自锁（连「修这条路径」的修复会话都起不来）。只有用法错误 ∨ 内部 bug
 （不该发生）才非 0。
@@ -22,10 +25,11 @@ CLI（扩展侧 `execFileSync` 调用；**stdout = 一个 JSON 对象**，告警
 与 `bots/extensions/profile-loader/`）：
 
     schemaVersion   int    本 schema 版本
-    form            str    "task" ∨ "resident"
+    form            str    "task" ∨ "resident" ∨ "interactive"（= 所用 profile 清单的 `form`
+                           字段；无 profile ∨ 未声明 ∨ 非法 = 缺省档 "task"）
     profile         str?   实际使用的 profile 名（回落时 = 回落面）；未设/非法 = null
     fallback        bool   是否走了任务形态的缺省回落
-    caps            [str]  展开后的有序能力名（已前置基线 / 去重保序）
+    caps            [str]  展开后的有序能力名（= profile 的 `caps` 声明序，去重保序）
     appendParts     [str]  **按注入序**的追加正文（逐能力 prompt.md 全文 + 末位知识清单块）
     appendJoiner    str    多段追加正文的拼接符（= pi 自身的语义：它对多段追加正文正是
                            `join("\n\n")`，dist/core/agent-session.js；单点在此，
@@ -35,7 +39,7 @@ CLI（扩展侧 `execFileSync` 调用；**stdout = 一个 JSON 对象**，告警
     extensionPaths  [str]  能力捆绑扩展的绝对 .ts 路径（**注入层兑现不了**：pi 无运行期装载
                            扩展的 API ⇒ 有值即一条 warning，处置 = 退役该字段）
     tools           [str]  ∪(声明者 tools)；空 = 未声明（不发白名单）
-    excludeTools    [str]  ∪(声明者 excludeTools) ∪ 形态基线
+    excludeTools    [str]  ∪(声明者 excludeTools)
     model           str?   profile 的 `model`（能力层无此字段）
     provider        str?   由 model 的 provider 段派生（`<provider>/<id>` 才派生）
     contextCompaction obj? 归一化策略（字段缺失/非法 = null）
@@ -52,6 +56,14 @@ SCHEMA_VERSION = 1
 
 FORM_TASK = "task"
 FORM_RESIDENT = "resident"
+FORM_INTERACTIVE = "interactive"
+FORMS = (FORM_TASK, FORM_RESIDENT, FORM_INTERACTIVE)   # profile 的 `form` 字段值域（三档语义 =
+                                            # `bots/docs/profile-assembly.md` §1；装配后果的差异
+                                            # 只有 task 档的回落闸，见 resolve_caps）
+FORM_FIELD = "form"                 # 形态轴的声明落点 = profile 清单的顶层字段
+FORM_DEFAULT = FORM_TASK            # 未声明/非法/无 profile 时的缺省档 = **最严档**（三档里唯一带
+                                            # 装配后果的档 ⇒ 漏声明的方向是收紧、不是松动；
+                                            # fail-soft 绝不 die，提交期兜底 = cap_lint 的 E17）
 
 # 追加正文的拼接符 = pi 自身的语义（多个 --append-system-prompt 按序 join("\n\n")，
 # 整段再以 "\n\n" 接在基础提示之后：dist/core/agent-session.js 与 core/system-prompt.js）。
@@ -66,11 +78,12 @@ PROFILES_REL = "bots/profiles"              # profile 薄清单：<名>.json（�
                                             # model/caps/contextCompaction，不直挂捆绑资产）
 SKILLS_REL = "bots/skills"                  # skill 共享库：cap.yml 按名捆绑，一级解析、不回落全局
 EXTS_REL = "bots/extensions"                # 扩展共享库：一个名字 = 一个扩展单元，一律 .ts
-TASK_BASELINE_CAP = "executor"              # 任务形态恒前置的能力（装配器硬规则）；resident 不前置
-TASK_FALLBACK_PROFILE = "executor"          # 任务形态未设 DISPATCH_PROFILE（∨ 名字非法 = 按未设处置）时
-                                            # 回落的缺省 profile：`model` 只住 profile ⇒ 回落面即任务形态的
-                                            # 缺省模型角色档（resident 形态不回落；其 caps 就是基线能力本身
-                                            # ⇒ 注入面与回落前逐字一致）。fail-soft 见 resolve_caps
+TASK_FALLBACK_PROFILE = "executor"          # 未设 DISPATCH_PROFILE（∨ 名字非法 = 按未设处置）时
+                                            # 回落的缺省 profile（= task 档的缺省模型角色档）：
+                                            # `model` 只住 profile ⇒ 无 profile 就拿不到它。
+                                            # 回落面自己的 `form` 声明就是 task（两份声明同值）；
+                                            # resident/interactive 档只能由显式 profile 声明到达
+                                            # （没有 profile 就无从读形态）。fail-soft 见 resolve_caps
 CAP_ALLOWED_FIELDS = frozenset({"summary", "skills", "extensions", "knowledge",
                                 "tools", "excludeTools"})   # cap.yml 合法键闭合集（禁 caps/model）
 PROFILE_BANNED_FIELDS = ("skills", "extensions", "knowledge", "tools",
@@ -88,9 +101,10 @@ CC_FIELDS = ("enabled", "triggerTokens", "triggerRatio",
                                             # prepareCompaction 内算定），见 cc_policy
 CC_INSTRUCTIONS_MAX = 2000                 # customInstructions 字符数上界（与 policy.ts 同口径）
 
-# 形态基线排除集（安全面单调收紧、与 caps 序无关）：任务形态恒屏蔽 ask_user（反问走调度协议），
-# resident 形态为空（主端 ask_user 链路保留）。
-FORM_XT_BASELINE = {FORM_TASK: ("ask_user",), FORM_RESIDENT: ()}
+# 安全不变量（task 档必带执行者基线人格 ∧ 必屏蔽 ask_user）**不住本层**：声明载体 =
+# `form: task` 的 profile 在 `caps` 首位列 `executor` + `bots/caps/executor/cap.yml` 的
+# `excludeTools: [ask_user]`；提交期判据（双向钉桩）= `bots/cap_lint.py` 的 E17。
+# 本层只承担一件形态派生行为 = task 档无 profile 名时的回落闸（TASK_FALLBACK_PROFILE）。
 
 
 def cc_policy(raw):
@@ -188,13 +202,9 @@ class Resolver:
     `self.warnings`（⇒ JSON 的 `warnings[]` 与 stderr 告警同源，不两处维护）。
     """
 
-    def __init__(self, root, form=FORM_TASK, emit=None):
-        if form not in FORM_XT_BASELINE:
-            raise ValueError("form 必须是 %s ∨ %s（实得 %r）"
-                             % (FORM_TASK, FORM_RESIDENT, form))
+    def __init__(self, root, emit=None):
         self.root = root or ""
-        self.form = form
-        self.resident = (form == FORM_RESIDENT)
+        self.form = FORM_DEFAULT   # 解析期按 profile 的 `form` 字段改写（见 profile_form）
         self._emit = emit or _stderr_emit
         self.warnings = []
 
@@ -228,7 +238,7 @@ class Resolver:
             "skillPaths": [],
             "extensionPaths": [],
             "tools": [],
-            "excludeTools": list(FORM_XT_BASELINE[self.form]),
+            "excludeTools": [],
             "model": None,
             "provider": None,
             "contextCompaction": None,
@@ -239,6 +249,7 @@ class Resolver:
         }
         caps, model, pname, cc, fallback = self.resolve_caps(profile_raw)
         out["profile"], out["fallback"] = pname, fallback
+        out["form"] = self.form          # 形态在 resolve_caps 里定档（来源 = profile 的 `form`）
         out["caps"] = caps
         out["model"] = model
         out["provider"] = provider_of_model(model)
@@ -266,12 +277,12 @@ class Resolver:
             self.emit("能力 %r 注入：prompt=%d 字符，skills=%d，extensions=%d",
                       name, unit["chars"], len(unit["skills"]), len(unit["exts"]))
 
-        # 工具面并集（去重保序）；排除集 = 声明者并集 ∪ 形态基线（安全面单调收紧、与 caps 序无关）
+        # 工具面并集（去重保序）；排除集 = 声明者并集（安全面单调收紧、与 caps 序无关）
         out["tools"] = self._dedup(t_list)
-        out["excludeTools"] = self._dedup(list(FORM_XT_BASELINE[self.form]) + xt_decl)
+        out["excludeTools"] = self._dedup(xt_decl)
         killed = [t for t in out["tools"] if t in set(out["excludeTools"])]
         if killed:
-            self.emit("WARN: 工具面白名单项 %s 被排除集命中（∪excludeTools ∪ 形态基线）⇒ 最终不生效"
+            self.emit("WARN: 工具面白名单项 %s 被排除集命中（∪excludeTools）⇒ 最终不生效"
                       "（pi 的 excludeTools 在 tools 白名单之后生效）；可见即可，不阻断",
                       ",".join(killed))
 
@@ -326,12 +337,13 @@ class Resolver:
 
     def load_profile_doc(self, name):
         """读 profile 薄清单 `bots/profiles/<名>.json` → dict ∨ None。
-        缺失 / 不可读 / JSON 损坏 / 顶层非对象 = WARN + None（任务形态仍前置基线能力，
-        resident = 裸启动）。直挂捆绑字段（profile 只列 caps，不给逃生口）= WARN 忽略该字段。"""
+        缺失 / 不可读 / JSON 损坏 / 顶层非对象 = WARN + None（⇒ 无可注入能力 = 裸启动，且形态
+        无从读起 ⇒ 按缺省档处置，见 profile_form）。直挂捆绑字段（profile 只列 caps，不给逃生口）
+        = WARN 忽略该字段。"""
         pf = os.path.join(self.root, PROFILES_REL, name + ".json")
         if not os.path.isfile(pf):
-            self.emit("WARN: profile %r 不存在（%s），跳过（任务形态仍会前置基线能力；"
-                      "resident 形态 = 裸启动）", name, pf)
+            self.emit("WARN: profile %r 不存在（%s），跳过（无可注入能力 = 人格面缺席，"
+                      "会话裸起；取证 = 会话内 /persona）", name, pf)
             return None
         try:
             with open(pf, encoding="utf-8") as f:
@@ -348,79 +360,101 @@ class Resolver:
                           "要额外装就建一个 bundle 能力）→ 忽略该字段", name, banned)
         return doc
 
+    def profile_form(self, doc, name):
+        """profile 清单的 `form` 字段 → 三档之一（缺失/非法/无清单 = 缺省最严档 + WARN）。
+
+        **形态轴的单一来源就是本字段**（不再读 env）；三档语义与装配矩阵 =
+        `bots/docs/profile-assembly.md` §1。fail-soft 是硬要求（与 profile 缺失同口径）：
+        本函数在所有会话 spawn 的公共路径上，任何畸形值都只降级、**绝不 die**（硬失败会自锁
+        ——连「修这条路径」的修复会话都起不来）。缺省取最严档的理由 = 三档里只有 task 档带装配
+        后果（无 profile 名时的回落闸）⇒ 漏声明的方向是**收紧**、不会让任何会话少拿基线人格；
+        提交期兜底 = `bots/cap_lint.py` 的 E17（漏声明 ∨ 非法值即 ERROR）。清单不可读时不另记
+        WARN（load_profile_doc 已点名成因）。"""
+        if doc is None:
+            return FORM_DEFAULT
+        raw = doc.get(FORM_FIELD)
+        if raw is None:
+            self.emit("WARN: profile %r 未声明 `%s` 字段（三档 = %s）⇒ 按最严档 %s 装配"
+                      "（提交期判据 = bots/cap_lint.py 的 E17：漏声明即 ERROR）",
+                      name, FORM_FIELD, "|".join(FORMS), FORM_DEFAULT)
+            return FORM_DEFAULT
+        if not isinstance(raw, str) or raw.strip() not in FORMS:
+            self.emit("WARN: profile %r 的 `%s` 值非法 %r（三档 = %s）⇒ 按最严档 %s 装配",
+                      name, FORM_FIELD, raw, "|".join(FORMS), FORM_DEFAULT)
+            return FORM_DEFAULT
+        return raw.strip()
+
     def resolve_caps(self, profile_raw):
         """profile 名 → (能力名有序列表, model ∨ None, profile 名 ∨ None, cc 策略 ∨ None, 是否回落)。
-        注入序 = profile 的 `caps` 列表序（平铺，能力不引用能力）；**任务形态恒前置 `executor` 能力**
-        （装配器硬规则承担，防漏列；resident 形态不前置）。`model` 只住 profile（能力层无此字段：
-        复用单元不该决定运行环境）。降级：caps 缺失/非数组/元素非法 → WARN 逐项跳过。
-        **任务形态未设 profile（∨ 名字非法 = 按未设处置）⇒ 回落 `TASK_FALLBACK_PROFILE`**：回落复用
-        **同一条**解析路径（清单读取 / caps 校验 / model 取值 / 基线前置去重全部照旧，不另写平行分支），
-        故回落后的 caps 与「只前置基线能力」逐字一致（回落 profile 的 caps 就是基线能力本身），
-        差别只是拿到它的 `model`。resident 形态**不回落**（注入面逐字不变）；显式设了合法 profile 名
-        （哪怕清单缺失）**也不回落**（名字合法 = 作者有指定意图，缺失属降级而非未设）。"""
+
+        **形态（`self.form`）在本函数里定档**（单一来源 = profile 清单的 `form` 字段，见
+        profile_form）。注入序 = profile 的 `caps` 列表序（平铺，能力不引用能力）；**本层不按形态
+        前置任何能力、也不按形态排除任何工具**：安全不变量（task 档必带执行者基线人格 ∧ 必屏蔽
+        ask_user）的声明载体 = `form: task` 的 profile 在 `caps` 首位列 `executor` +
+        `bots/caps/executor/cap.yml` 的 `excludeTools: [ask_user]`，提交期判据（双向钉桩）=
+        `bots/cap_lint.py` 的 E17。`model` 只住 profile（能力层无此字段：复用单元不该决定运行
+        环境）。降级：caps 缺失/非数组/元素非法 → WARN 逐项跳过。
+        **未设 profile 名（∨ 名字非法 = 按未设处置）⇒ 回落 `TASK_FALLBACK_PROFILE`**（本层唯一的
+        形态派生行为：没有 profile 就无从读形态 ⇒ 缺省档 = task，而 task 档有回落）：回落复用
+        **同一条**解析路径（清单读取 / 形态定档 / caps 校验 / model 取值全部照旧，不另写平行分支），
+        故回落后的注入面与直接声明该 profile 逐字一致。resident/interactive 档**不回落**（只能由
+        显式 profile 声明到达）；显式设了合法 profile 名（哪怕清单缺失）**也不回落**（名字合法 =
+        作者有指定意图，缺失属降级而非未设）。"""
         name = self.parse_profile_name(profile_raw)
         fallback = False
-        if name is None and not self.resident:
-            # 任务形态的缺省模型角色档：`model` 只住 profile，未设 profile 就拿不到 ⇒ 回落
+        if name is None:
+            # task 档的缺省模型角色档：`model` 只住 profile，未设 profile 就拿不到 ⇒ 回落
             # `TASK_FALLBACK_PROFILE`。**fail-soft 是硬要求**：这条路径影响所有任务 spawn，回落面
             # 缺失/不可解析/无 model/类型非法一律 WARN + 不给 model（落回 settings 默认），
             # **绝不 die**——硬失败会自锁（连「修这条路径」的修复任务都起不来）。降级全靠下面
             # 既有的 `load_profile_doc` / model 类型分支承担，本处不重复实现。
             name, fallback = TASK_FALLBACK_PROFILE, True
         caps, model, cc = [], None, None
-        if name:
-            doc = self.load_profile_doc(name)
-            if doc is not None:
-                raw = doc.get("caps")
-                if raw is None:
-                    self.emit("WARN: profile %r 无 caps 字段（profile = 能力的有序声明列表）→ 无可注入能力",
-                              name)
-                elif not isinstance(raw, list):
-                    self.emit("WARN: profile %r 的 caps 非数组 %r，跳过", name, raw)
+        doc = self.load_profile_doc(name) if name else None
+        self.form = self.profile_form(doc, name)
+        if doc is not None:
+            raw = doc.get("caps")
+            if raw is None:
+                self.emit("WARN: profile %r 无 caps 字段（profile = 能力的有序声明列表）→ 无可注入能力",
+                          name)
+            elif not isinstance(raw, list):
+                self.emit("WARN: profile %r 的 caps 非数组 %r，跳过", name, raw)
+            else:
+                for item in raw:
+                    if not isinstance(item, str) or not item.strip():
+                        self.emit("WARN: profile %r 的 caps 含非字符串/空元素 %r，跳过", name, item)
+                        continue
+                    c = item.strip()
+                    if c in caps:
+                        self.emit("WARN: profile %r 的 caps 能力名重复 %r，去重保序", name, c)
+                        continue
+                    caps.append(c)
+            m = doc.get("model")
+            if isinstance(m, str) and m.strip():
+                model = m.strip()
+            elif m is not None:
+                self.emit("WARN: profile %r 的 model 字段非非空字符串，跳过 model 注入", name)
+            if "contextCompaction" in doc:
+                pol, err = cc_policy(doc.get("contextCompaction"))
+                if pol is None:
+                    # 与「profile 缺失 = 告警降级不硬失败」同口径：会话照起，只是策略不生效
+                    #（压缩行为落回 pi 内建的 settings 阈值）。
+                    self.emit("WARN: profile %r 的 contextCompaction 非法（%s）⇒ 不装配"
+                              "（不注入 %s 与 -e；会话照起，压缩行为落回 pi 内建 settings 阈值）",
+                              name, err, CONTEXT_COMPACTION_ENV)
                 else:
-                    for item in raw:
-                        if not isinstance(item, str) or not item.strip():
-                            self.emit("WARN: profile %r 的 caps 含非字符串/空元素 %r，跳过", name, item)
-                            continue
-                        c = item.strip()
-                        if c in caps:
-                            self.emit("WARN: profile %r 的 caps 能力名重复 %r，去重保序", name, c)
-                            continue
-                        caps.append(c)
-                m = doc.get("model")
-                if isinstance(m, str) and m.strip():
-                    model = m.strip()
-                elif m is not None:
-                    self.emit("WARN: profile %r 的 model 字段非非空字符串，跳过 model 注入", name)
-                if "contextCompaction" in doc:
-                    pol, err = cc_policy(doc.get("contextCompaction"))
-                    if pol is None:
-                        # 与「profile 缺失 = 告警降级不硬失败」同口径：会话照起，只是策略不生效
-                        #（压缩行为落回 pi 内建的 settings 阈值）。
-                        self.emit("WARN: profile %r 的 contextCompaction 非法（%s）⇒ 不装配"
-                                  "（不注入 %s 与 -e；会话照起，压缩行为落回 pi 内建 settings 阈值）",
-                                  name, err, CONTEXT_COMPACTION_ENV)
-                    else:
-                        cc = pol
-        if not self.resident:
-            if TASK_BASELINE_CAP in caps:
-                # 已列在首位 = 声明与硬规则一致（如 `executor` profile 自身），静默去重；
-                # 列在非首位 = 作者意图与「基线恒首」不一致（装配器会把它提到首位），值得告警。
-                if caps[0] != TASK_BASELINE_CAP:
-                    self.emit("WARN: profile %r 的 caps 把 %r 列在非首位——任务形态由装配器恒前置该能力，"
-                              "已提到首位并去重", name, TASK_BASELINE_CAP)
-                caps = [c for c in caps if c != TASK_BASELINE_CAP]
-            caps = [TASK_BASELINE_CAP] + caps
+                    cc = pol
         if fallback:
             # 回落一条日志（事后可从 run/logs/* 归因「这个任务的 model 从哪来」）；拿不到 model
             # 时升为 WARN（fail-soft 分支：不注入 model、不硬失败）。
             if model:
-                self.emit("任务形态未设 DISPATCH_PROFILE → 回落 %r profile（缺省模型角色档）："
-                          "model=%s，caps=%s", name, model, ",".join(caps))
+                self.emit("未设 DISPATCH_PROFILE → 按缺省档 %s 回落 %r profile（缺省模型角色档）："
+                          "model=%s，caps=%s", self.form, name, model, ",".join(caps))
             else:
-                self.emit("WARN: 任务形态未设 DISPATCH_PROFILE → 回落 %r profile，但解析不到可用 model"
+                self.emit("WARN: 未设 DISPATCH_PROFILE → 按缺省档 %s 回落 %r profile，但解析不到可用 model"
                           "（清单缺失/损坏/无 model 字段/类型非法，成因见上方告警）⇒ 不切模型，"
-                          "落回 settings 默认（fail-soft：本路径影响所有任务 spawn，硬失败会自锁）", name)
+                          "落回 settings 默认（fail-soft：本路径影响所有任务 spawn，硬失败会自锁）",
+                          self.form, name)
         return caps, model, name, cc, fallback
 
     # ---------- 能力单元 ----------
@@ -689,9 +723,9 @@ class Resolver:
         return list(dict.fromkeys(seq))
 
 
-def resolve(root, form=FORM_TASK, profile=None, emit=None):
-    """便捷入口：一次解析（`Resolver.resolve` 的函数形态）。"""
-    return Resolver(root, form=form, emit=emit).resolve(profile)
+def resolve(root, profile=None, emit=None):
+    """便捷入口：一次解析（`Resolver.resolve` 的函数形态）。形态由 profile 的 `form` 字段定档。"""
+    return Resolver(root, emit=emit).resolve(profile)
 
 
 def main(argv=None):
@@ -702,10 +736,8 @@ def main(argv=None):
     r = sub.add_parser("resolve", help="解析一个 profile → JSON")
     r.add_argument("--root", default=os.environ.get("AGENT_ROOT", ""),
                    help="工作区根（缺省 = env AGENT_ROOT）")
-    r.add_argument("--form", choices=(FORM_TASK, FORM_RESIDENT), default=FORM_TASK,
-                   help="会话形态（task = 前置基线能力 + 回落 + 屏蔽 ask_user）")
     r.add_argument("--profile", default=None,
-                   help="profile 名（缺省 = 读 env DISPATCH_PROFILE）")
+                   help="profile 名（缺省 = 读 env DISPATCH_PROFILE；形态取自该 profile 的 `form` 字段）")
     r.add_argument("--compact", action="store_true", help="紧凑 JSON（无缩进）")
     a = ap.parse_args(argv)
     if a.cmd != "resolve":                 # argparse 已限制值域，此支为将来子命令留位
@@ -713,7 +745,7 @@ def main(argv=None):
     if not a.root:
         sys.stderr.write("[persona] FATAL: 需要 --root ∨ env AGENT_ROOT\n")
         return 2
-    out = resolve(a.root, form=a.form, profile=a.profile)
+    out = resolve(a.root, profile=a.profile)
     sys.stdout.write(json.dumps(out, ensure_ascii=False,
                                 separators=(",", ":") if a.compact else None) + "\n")
     return 0
