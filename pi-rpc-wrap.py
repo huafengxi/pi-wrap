@@ -77,7 +77,7 @@ skill 路径 / 活动工具集 / 模型 / 压缩策略）。本文件对人格�
 ① 把注入层扩展 `-e` 进去（同时钉住它在 pi 扩展装载序里的位置 = 先于自动发现的全局扩展，
 故人格正文落在其它扩展的追加之前）；② 透传它需要的两枚输入 env（`DISPATCH_PROFILE` = profile 名、
 `AGENTD_RESIDENT` = 形态；均来自 spec.command，逐字不改）。机制口径权威 = assistant/DISPATCH.md §3，
-装配面逐格全文 = assistant/docs/profile-assembly.md，资产形态与字段规范 = bots/README.md
+装配面逐格全文 = bots/docs/profile-assembly.md，资产形态与字段规范 = bots/README.md
 「人格资产」/「知识库规范」节，解析层的输入输出契约 = persona.py 模块头。
 **排障面的位置变更**：逐能力注入日志（`人格装配（会话内注入）：…`）与解析层告警现在写在 **pi 的
 stderr** ⇒ 落 `run/agentd/<name>.stderr.log`（与诊断的 stderr 尾同源），不再在 wrap 自己的日志里；
