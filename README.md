@@ -19,6 +19,20 @@ design notes are the module docstrings of `pi-rpc-wrap.py` (lifecycle + argv
 emission) and `persona.py` (persona assembly); this file is the entry point for a
 reader who found the repo first.
 
+## 收录判据
+
+**① 本仓只住机制**：一次会话的**生命周期**语义 —— argv 发射（`-e` 装载序、env 透传）、就绪握手、退出码契约、观测 socket 透传、人格装配的**解析层**（`persona.py`：合并语义与全部 fail-soft 降级分支）、身份 env 的洗刷名单。观测/交互智能（入口基线、事件环、消息注入、自愈）一律属**消费方**，本仓不实现（首节那句边界是本体，本节只列「什么不得进来」）。
+
+三类内容不得入本仓代码 —— 由调用方注入 ∨ 现场发现：
+
+- **工作区政策文案与人格资产正文**：任务书措辞、能力/profile 正文。本仓只**装配**（按调用方布局读 `bots/caps/<名>/{cap.yml,prompt.md}` 与 `bots/profiles/<名>.json`），⛔ 不含其正文一个字节。
+- **实现体路径与会话封装形态**：拉起什么命令、注入哪些扩展。命令由调用方给（agentd 侧写进 `spec.command`，含其中的 env 前缀）；本仓的扩展相对路径收敛成**单点常量**（`EXT_DIR_REL`），部署面不同时经 `AGENTD_EXT_REL` 注入 ⇒ **零改码**。
+- **按部署面变化的值**：主机名与机器清单、仓名单、内网端点、凭据面路径。机器身份由调用方按 `<root>/env/host-id` 现场查表，`<root>` 由调用方传（`--root` 缺省 = 本仓父目录，现场发现）。
+
+判据（可验证）：**改一处部署 ∨ 改一条政策措辞，不得产生本仓的 diff**。
+
+**② 已知残留（记账，⛔ 不当缺陷重提）**：`pi-rpc-wrap.py` 里三枚相对路径常量的**缺省值**写的是参照部署的布局 —— `EXT_DIR_REL`（可经 `AGENTD_EXT_REL` 注入）、`PROFILE_LOADER_EXT_REL`、`PROBE_EXT_REL`（后两枚无注入口）。裁定（2026-10-01，agentfw 域）：⛔ **不属收录判据违例** —— 三者四机同值、随 git 同步，不是「按部署面变化的值」；判据的行为面（改部署 ⇒ 零 diff）由 `AGENTD_EXT_REL` 与 `--root` 现场发现满足。**重议触发** = 出现一次「某台机/某个调用方需要不同路径」的真实需求 ⇒ 那时给后两枚补同款 env 注入口（⛔ 不提前加，属为假想部署加码）。
+
 ## Why a wrapper at all
 
 The failure modes it closes are all forms of **false success** and **spawn races**:
