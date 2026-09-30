@@ -12,6 +12,7 @@ import glob
 import json
 import os
 import re
+import select
 import shutil
 import signal
 import socket
@@ -1276,9 +1277,42 @@ def t45_retired_marker_zero_reflow():
            cmd in core and not re.match(r"^[A-Z][A-Z0-9_]*=", cmd), repr(cmd))
 
 
+def _stderr_drain_until(p, needle, timeout=10):
+    """kill **前**在活进程的 stderr 上有界等 needle 出现，返回这期间读到的文本累积。
+
+    为什么需要它（T46a 的顺序竞态）：wrap 的 `初始 prompt 已投递并被接受` 写在
+    `init_waiter.wait()` 返回之后（= 收到子端回执），而测试原先只等 fake pi 的 prompt
+    flag（= 子端**收到** prompt 的更早时刻）⇒ 负载下组杀可早于该行写出，杀后读拿不到它。
+    修在测试面：把观测点从「杀后读尾文本」挪到「杀前已等到期望行」，杀后读保留作兜底。
+
+    只用 `os.read(fd)`（不经 p.stderr 的缓冲读）⇒ 随后 `_stderr_after_kill` 的
+    `p.stderr.read()` 仍能读到管道里剩余部分：两段拼接无丢失、无重复。
+    needle 出现 ∨ EOF（写端已关）∨ 超时即返回；有界，绝不无条件等。"""
+    buf = b""
+    fd = p.stderr.fileno()
+    dl = time.time() + timeout
+    while needle not in buf.decode("utf-8", "replace"):
+        left = dl - time.time()
+        if left <= 0:
+            break
+        r, _, _ = select.select([fd], [], [], min(left, 0.2))
+        if not r:
+            continue
+        try:
+            chunk = os.read(fd, 4096)
+        except OSError:
+            break
+        if not chunk:                     # EOF：进程已死、写端关闭
+            break
+        buf += chunk
+    return buf.decode("utf-8", "replace")
+
+
 def _stderr_after_kill(p, timeout=10):
     """resident 形态（不收敛）读 wrap 自身 stderr 的唯一安全形态：先杀完进程组再 read，
-    否则 read() 无限阻塞 = 假活（同 T36d 的既有处置）。返回文本（不可读时返回原因串）。"""
+    否则 read() 无限阻塞 = 假活（同 T36d 的既有处置）。返回文本（不可读时返回原因串）。
+    断言的行可能写在「测试已观测到子端标记」之后（见 `_stderr_drain_until`）⇒ 调用方须先
+    在杀前等到期望行，本函数只作兜底（两段文本合并后判定）。"""
     try:
         p.wait(timeout=timeout)
         return p.stderr.read().decode("utf-8", "replace")
@@ -1299,6 +1333,7 @@ def t46_resident_prompt_delivery():
             extra_env={"AGENTD_RESIDENT": "1",
                        "AGENTD_SESSION_NAME": "bot/zz-resident-t46a"})
     p = e.start_wrap()
+    live = ""
     try:
         ok("T46a sock 就位", e.wait_sock())
         ok("T46a pi 子进程已启动（argv 快照在场）", e.wait_argv())
@@ -1312,9 +1347,11 @@ def t46_resident_prompt_delivery():
         iok = proto.task_ready_path(e.root, e.name, "init-ok")
         ok("T46a resident 不落 init-ok 标记（reason 只在日志面）",
            not os.path.exists(iok), iok)
+        # 期望的日志行晚于上面那枚 flag（wrap 要收到子端回执才写）⇒ 杀前先在活进程上等到它
+        live = _stderr_drain_until(p, "初始 prompt 已投递并被接受")
     finally:
         e.cleanup([p])
-    err = _stderr_after_kill(p)
+    err = live + _stderr_after_kill(p)   # 杀前累积 + 杀后兜底（两段拼接，无丢失无重复）
     ok("T46a 日志 reason = 已投递并被接受（不是 resident-bare-start）",
        "初始 prompt 已投递并被接受" in err
        and "resident-bare-start" not in err and "裸启动" not in err,
