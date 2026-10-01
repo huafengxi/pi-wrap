@@ -153,7 +153,7 @@ def main():
     ap.add_argument("case")
     ap.add_argument("--mode", choices=["direct", "wrap"], default="direct")
     ap.add_argument("--form", choices=["task", "resident"], default="task",
-                    help="会话档，两个協调效果：① 常驻标记 env（AGENTD_RESIDENT + "
+                    help="会话档，两个协调效果：① 常驻标记 env（AGENTD_RESIDENT + "
                          "AGENTD_SESSION_NAME）——供 wrap 的完成收敛形态与注入层的「是否 agentd "
                          "监督会话」判据；② 把工作根里那份 profile **副本**的 `form` 字段写成同值"
                          "（人格形态轴住 profile 清单、不住 env；副本是软链 ⇒ 不写，只打一行 SKIP）")

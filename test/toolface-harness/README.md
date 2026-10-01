@@ -108,7 +108,7 @@ HARNESS_ROOT=$R ./clean.sh                      # 收尾：过断言后删工作
 
 ## 已知边界
 
-- `--form <档>` 有**两个協调效果**（人格形态轴已从 env 收进 profile 的 `form` 字段）：① 写常驻标记
+- `--form <档>` 有**两个协调效果**（人格形态轴已从 env 收进 profile 的 `form` 字段）：① 写常驻标记
   env（`AGENTD_RESIDENT` + `AGENTD_SESSION_NAME`）——它们仍是 wrap 的完成收敛形态与注入层「是否
   agentd 监督会话」判据的输入；② 把工作根里那份 profile **副本**的 `form` 字段写成同值（只写
   harness 自建的副本：软链/跳出工作根一律不写，判据 = `drive.py:sync_profile_form` 的三重身份断言）。

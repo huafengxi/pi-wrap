@@ -1530,9 +1530,14 @@ def t48_persona_emission():
         ok("T48a 装载行在场（点名 profile；排障可从 agentd.log 归因）",
            "人格注入层装载" in err and "profile=review" in err,
            err[-400:])
+        # 判据面收窄到「装载行那一行」（源 = pi-rpc-wrap.py:413 的 log("人格注入层装载：%s（profile=%s）")）：
+        # 原判据 `"form=" not in err` 的取样面是 wrap 的**整段** stderr ⇒ 任何将来往该 stderr 加的含
+        # `form=` 字样的行都会假红，且报错名指向「装载行不再自报形态」这个与真因无关的名字（C 批评审件
+        # 建议 5）。收紧后仍非空断言：bool(load_lines) 要求装载行在场（⛔ 不让 all([]) 造成真空真）。
+        load_lines = [l for l in err.splitlines() if "人格注入层装载" in l]
         ok("T48a 装载行不再自报形态（形态轴住 profile 的 `form` 字段，由解析层定档后写在"
            "注入层自己的装配摘要行里）",
-           "form=" not in err, err[-400:])
+           bool(load_lines) and all("form=" not in l for l in load_lines), err[-400:])
         ok("T48a 照常收敛 exit 0、无诊断", rc == 0 and e.read_diag() is None, "rc=%s" % rc)
         # ② 输入 env 透传
         pe = e.read_persona_env() or {}
