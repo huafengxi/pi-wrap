@@ -492,6 +492,22 @@ def p9_cc():
         rr = t.resolve(profile="p-res")
         ok("P9g resident 档同等装配（策略住 profile、与形态无关）",
            rr["contextCompactionExt"] == ext, rr["contextCompactionExt"])
+        # 零 cap 是合法声明（interactive 档的定档形态），而 resolve() 对它走早退分支
+        # ⇒ 早退不得吞掉与能力面无关的运行环境字段（一手缺陷：command-center 声明了
+        # 策略却被静默丢弃、零 WARN，压缩落回 pi 内建阈值）。
+        t.profile("p-zero", caps=[], model="p/m", form=persona.FORM_INTERACTIVE,
+                  extra={"contextCompaction": {"triggerTokens": 512000}})
+        rz = t.resolve(profile="p-zero")
+        ok("P9h 零 cap 的早退分支同等装配策略（形态/能力面都不改变该字段的装配）",
+           rz["caps"] == []
+           and rz["contextCompaction"] == {"enabled": True, "triggerTokens": 512000}
+           and rz["contextCompactionExt"] == ext,
+           (rz["caps"], rz["contextCompaction"], rz["contextCompactionExt"]))
+        t.profile("q-zero", caps=[], model="p/m", form=persona.FORM_INTERACTIVE)
+        rz2 = t.resolve(profile="q-zero")
+        ok("P9i 零 cap 且未声明策略 ⇒ 两键仍同为空（早退分支不凭空装配）",
+           rz2["contextCompaction"] is None and rz2["contextCompactionExt"] is None,
+           (rz2["contextCompaction"], rz2["contextCompactionExt"]))
     finally:
         t.cleanup()
 

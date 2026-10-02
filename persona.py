@@ -254,7 +254,14 @@ class Resolver:
         out["model"] = model
         out["provider"] = provider_of_model(model)
         if not caps:
+            # 零 cap 是合法声明（interactive 档的定档形态）⇒ 早退只省掉能力面的展开，
+            # **不得吞掉与能力面无关的运行环境字段**（压缩策略住 profile、按声明装配）。
             out["excludeTools"] = self._dedup(out["excludeTools"])
+            self.emit("profile %s 展开完成：能力=（零声明），model=%s，provider=%s，工具面=（缺省）",
+                      repr(pname) if pname else "（未设）", model or "（缺省）",
+                      out["provider"] or "（缺省）")
+            self._assemble_cc(out, cc)
+            out["warnings"] = list(self.warnings)
             return out
 
         kb_entries, t_list, xt_decl = [], [], []
@@ -301,19 +308,27 @@ class Resolver:
                         if out["excludeTools"] else "（缺省）"))
 
         # contextCompaction（profile 级运行环境字段；两形态同等，策略住 profile、与形态无关）
-        if cc:
-            ext = os.path.join(self.root, CONTEXT_COMPACTION_EXT_REL)
-            if not os.path.isfile(ext):
-                self.emit("WARN: contextCompaction 执行体缺失，跳过装配（策略已声明但装配不上；"
-                          "会话照起，压缩行为落回 pi 内建 settings 阈值）: %s", ext)
-            else:
-                out["contextCompaction"] = cc
-                out["contextCompactionExt"] = ext
-                self.emit("contextCompaction 装配：trigger=%s ratio=%s enabled=%s ext=%s",
-                          cc.get("triggerTokens", "（未设）"), cc.get("triggerRatio", "（未设）"),
-                          cc.get("enabled", True), ext)
+        self._assemble_cc(out, cc)
         out["warnings"] = list(self.warnings)
         return out
+
+    def _assemble_cc(self, out, cc):
+        """压缩策略的装配（**单一实现**：零 cap 的早退分支与常规分支都调它，不写平行分支）。
+
+        策略与路径同进同退；执行体缺失 = WARN + 不装配（fail-soft：会话照起，压缩落回 pi
+        内建的 settings 阈值）。"""
+        if not cc:
+            return
+        ext = os.path.join(self.root, CONTEXT_COMPACTION_EXT_REL)
+        if not os.path.isfile(ext):
+            self.emit("WARN: contextCompaction 执行体缺失，跳过装配（策略已声明但装配不上；"
+                      "会话照起，压缩行为落回 pi 内建 settings 阈值）: %s", ext)
+            return
+        out["contextCompaction"] = cc
+        out["contextCompactionExt"] = ext
+        self.emit("contextCompaction 装配：trigger=%s ratio=%s enabled=%s ext=%s",
+                  cc.get("triggerTokens", "（未设）"), cc.get("triggerRatio", "（未设）"),
+                  cc.get("enabled", True), ext)
 
     # ---------- profile 薄清单 ----------
 
