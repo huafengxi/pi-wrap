@@ -1434,7 +1434,8 @@ def t46_resident_prompt_delivery():
 _CMD_PREFIX_SOURCES = (
     # (相对工作区根的 glob, 说明)。不在场 = 该源不在本快照内（w/ 整树 gitignored、pi-wrap
     # 单独 checkout）⇒ 显式记一条跳过，不静默、不当失败。
-    ("bots/daemon/*/spec.json", "守护型/进程型 bot 的被追踪声明源"),
+    ("bots/daemon/*/spec.json", "守护型/进程型 bot 的被追踪声明源（一层形态 = seed 缺省族 bot/）"),
+    ("bots/daemon/*/*/spec.json", "同上，两层形态（声明的父目录名 = 族，如 queue/；seed.sh 按层级取族）"),
     ("bots/position-watcher/position-watcher.py", "一次性 handler 的 spawn 命令常量（WRAP_CMD）的写者"),
     ("heartbeats/register.py", "定时触发面的登记脚本（spec.command 常量）"),
 )
