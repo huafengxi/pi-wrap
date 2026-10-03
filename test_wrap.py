@@ -1434,7 +1434,8 @@ def t46_resident_prompt_delivery():
 _CMD_PREFIX_SOURCES = (
     # (相对工作区根的 glob, 说明)。不在场 = 该源不在本快照内（w/ 整树 gitignored、pi-wrap
     # 单独 checkout）⇒ 显式记一条跳过，不静默、不当失败。
-    ("bots/daemon/*/spec.json", "守护型/常驻 bot 的被追踪声明源"),
+    ("bots/daemon/*/spec.json", "守护型/进程型 bot 的被追踪声明源"),
+    ("bots/position-watcher/position-watcher.py", "一次性 handler 的 spawn 命令常量（WRAP_CMD）的写者"),
     ("heartbeats/register.py", "定时触发面的登记脚本（spec.command 常量）"),
 )
 # `KEY=VAL KEY=VAL … exec|python3|bash` 形态的前缀键（值可含引号/`$`/`{}`）
@@ -1470,7 +1471,13 @@ def t47_spec_command_env_scrub():
     if not found:
         ok("T47 各声明源均不在本快照内 → 本组跳过（无断言可跑）", True)
         return
-    known = {"DISPATCH_PROFILE", "AGENTD_RESIDENT", "AGENTD_SESSION_NAME"}
+    # known = 现网被追踪声明面真在写的前缀键全集（⛔ 写死枚数，但写死**集合**防正则失配的假绿）。
+    # `AGENTD_SESSION_NAME` 已不在本集合：它的唯一写者 = 三枚会话型常驻 bot 的声明源
+    # （bots/daemon/{dev-dispatcher,agentfw-lead,work-lead}/spec.json），随常驻退役已删 ⇒ 现网无任何
+    # 被追踪 spawn 命令写它（消费方 profile-loader.ts / host-info.ts / pi-rpc-wrap.py 按各自优先级
+    # 回落 AGENT_SELF ∨ AGENT_HOME）。它**仍在洗刷名单里**（身份标记类：即使无人写，也不得从宿主
+    # 环境继承下去），只是不再被本组的「扫到即断言」路径覆盖。
+    known = {"DISPATCH_PROFILE", "AGENTD_RESIDENT"}
     ok("T47a 扫到 known 全集（%d 枚）前缀键（正则未失配、非假绿）" % len(known),
        known <= set(found),
        sorted(found))
