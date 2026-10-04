@@ -710,9 +710,12 @@ def p14_knowledge_tiers():
            and "grep -rn <关键词>" in blk and "log -S<关键词>" in blk, blk[:600])
         ok("P14g desk 档不逐册列 journal、账本与自建工作文件不注入清单",
            "2026-09.md" not in blk and "**不注入清单**" in blk and "todo.md" in blk, blk[:600])
+        # 本臂只钉**装配层**契约：archive 档被渲染进块（节头 + 该目录路径在场）∧ 死档不逐档列文件。
+        # ⛔ 钉 kb_index 渲染出的政策文案（如归档族清单）：主仓改一条措辞就会产生本仓 diff
+        # （= 本仓 README「收录判据」的可验证面），措辞断言的单一事实源 = 主仓 bots/test_kb_index.py 的 T10 archive 臂。
         ok("P14g archive 档 = 一行检索入口（不注入清单）",
            "### 档案库 `archive`" in blk and d["archive"] in blk
-           and "incidents-x.md" not in blk and "incidents-" in blk, blk[:600])
+           and "incidents-x.md" not in blk, blk[:600])
         ok("P14g 块头三句消费纪律在场",
            all(x in blk for x in ("## 知识清单", "按需读取", "禁止预加载", "以权威为准")), blk[:300])
         ok("P14g 解析摘要一行（lore 档按层计数、legacy 0 项）",
