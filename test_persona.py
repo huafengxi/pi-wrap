@@ -748,18 +748,18 @@ def p14_knowledge_tiers():
     finally:
         t.cleanup()
 
-    # j) lore 名与 legacy 工作区路径混存
-    t, d = mk("p14j", ["library/dom", "kb/legacy"],
-              extra_dirs=[(os.path.join("kb", "legacy"), [("l.md", "legacy 册何时读")])])
+    # j) lore 名与非 lore 名（工作区路径形态）混存 ⇒ 后者整项被拒
+    t, d = mk("p14j", ["library/dom", "kb/wsdom"],
+              extra_dirs=[(os.path.join("kb", "wsdom"), [("l.md", "工作区路径册何时读")])])
     try:
         r = t.resolve(profile="mod")
         blk = r["appendParts"][1] if len(r["appendParts"]) == 2 else ""
-        ok("P14j 两档混存 ⇒ 各一节且顺序照声明（lore 档在前）",
-           "### 知识库 `library/dom`" in blk and blk.index("### 知识库") < blk.index("### 域 ")
-           and "legacy 册何时读" in blk, blk[:500])
-        ok("P14j legacy 档一条聚合 WARN + 解析摘要计数",
-           any("legacy 档" in w for w in r["warnings"])
-           and any("lore 档 1 项（library×1），legacy 工作区路径档 1 项" in l for l in t.lines),
+        ok("P14j 混存 ⇒ 只渲染 lore 档那一节（非 lore 名不渲染也不静默）",
+           "### 知识库 `library/dom`" in blk and blk.count("### ") == 1
+           and "工作区路径册何时读" not in blk, blk[:500])
+        ok("P14j 非 lore 名一条 WARN 自述「已退休」+ 解析摘要只计 lore 档",
+           any("已退休" in w for w in r["warnings"])
+           and any("lore 档 1 项（library×1），legacy 工作区路径档 0 项" in l for l in t.lines),
            json.dumps(r["warnings"], ensure_ascii=False)[:400])
     finally:
         t.cleanup()

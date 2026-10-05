@@ -558,7 +558,7 @@ class Resolver:
         """cap.yml 名单字段清洗（`skills`/`extensions`/`knowledge` 共用）：非数组 → WARN + 空；
         非字符串/空白元素 → WARN 跳过；`skills`/`extensions` 的名另拒路径分隔与前导点
         （防走出共享库一级）；`knowledge` 是 **lore 仓根下的名**（`library/<域>` ∨ `desk/<岗位>` ∨
-        `archive`，首段即层标识）∨ 工作区路径（legacy 档），故允许 `/`（`..` 段由 kb_index 拒）。"""
+        `archive`，首段即层标识），故允许 `/`（`..` 段与首段不是层标识的项由 kb_index 拒）。"""
         if v is None:
             return []
         if not isinstance(v, list):
