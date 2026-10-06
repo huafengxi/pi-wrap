@@ -624,7 +624,7 @@ def p12_cli():
 # 现网形态映射（验收面：本批把形态轴收进 profile 的逐枚落点）；名单外的 profile 只核通用判据。
 REAL_FORMS = {"executor": persona.FORM_TASK, "review": persona.FORM_TASK,
               "dispatcher": persona.FORM_RESIDENT, "moderator": persona.FORM_RESIDENT,
-              "agentfw-lead": persona.FORM_RESIDENT, "work-lead": persona.FORM_RESIDENT,
+              "work-lead": persona.FORM_RESIDENT,
               "command-center": persona.FORM_INTERACTIVE}
 
 
