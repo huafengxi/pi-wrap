@@ -1204,11 +1204,11 @@ def t43_heartbeat_prompt_anchor_lines():
     """T43 定时触发面 prompt.md 的两个锚定行与 core.ts::buildPromptMd **同源**（防漂断言）。
 
     定时触发面（`heartbeats/` 注册表 → 同目录 `register.py`）登记的任务，其 prompt.md
-    由 registrar 自写、不经 `buildPromptMd`（agentctl 无 prompt 渲染动词），而 `caps/executor` 的
-    「本次任务参数」锚定句（下文所有「任务目录」「本任务 taskId」均指该行）与「分级门禁」标记都要求
+    由 registrar 自写、不经 `buildPromptMd`（agentctl 无 prompt 渲染动词），而 `caps/executor-core` 的「本次任务参数」锚定句（下文所有「任务目录」「本任务 taskId」均指该行）
+    与 `caps/executor-leaf` 的「分级门禁」标记都要求
     这两行在 prompt **开头** ⇒ 缺行会让基线那两处引用对该形态悬空。
     镜像允许（python 重实现 = 第三份副本、node 跑 TS = 给脚本加运行时依赖），但**没有断言的镜像**
-    才是错 —— 漂移会在「executor 基线改了锚定句措辞」那天静默发生。本用例钉四面：① token 集同源
+    才是错 —— 漂移会在「任务基线改了锚定句措辞」那天静默发生。本用例钉四面：① token 集同源
     （任一侧改名即红）；② 位置在开头（两行先于「## 需求描述」）；③ 路径按 portablePath 同款口径
     渲染（$HOME 内 → 波浪号）；④ 参数行点名执行机 env。
     """
@@ -1237,10 +1237,10 @@ def t43_heartbeat_prompt_anchor_lines():
 
     need = block.index('"## 需求描述"')
     ok("T43 分级行在需求描述之前（= prompt 开头）",
-       block.index("任务分级") < need, "caps/executor 的分级门禁按「任务头部」标记对号")
+       block.index("任务分级") < need, "caps/executor-leaf 的分级门禁按「任务头部」标记对号")
     ok("T43 参数行在需求描述之前（= prompt 开头）",
        block.index("【本次任务参数】") < need,
-       "caps/executor 逐字依赖「任务 prompt **开头**的『本次任务参数』行」")
+       "caps/executor-core 逐字依赖「任务 prompt **开头**的『本次任务参数』行」")
     ok("T43 路径按 portablePath 同款口径（$HOME 内 → 波浪号形态）",
        "portable(" in block and "def portable(" in reg,
        "跨机可移植面：host≠登记机的件（如 host=mac 的产线件）拿到登记机绝对路径会不存在")
@@ -1254,7 +1254,7 @@ def t45_retired_marker_zero_reflow():
     定时触发面改为「一枚 timer 一件事」后，它登记的任务是叶子（探针件只读、产线件只产自己那份产物），
     该标记的全部消费面同批退役 = 递归守卫豁免（core.ts recursionGuardReason）、主端装配豁免
     （index.ts task-gate）、`send_message` 让位判定、洗刷名单（agentd/envscrub.py）、协议惯例条
-    （agentd/agent-file-protocol.md）、人格例外句（caps/executor）。
+    （agentd/agent-file-protocol.md）、人格例外句（caps/executor-leaf）。
       a) 洗刷名单不含该枚（名单是枚名制、只收在产标记：死键留着会让「名单 = 在产身份标记」失真）；
       b) 机制面零命中（core.ts / index.ts / envscrub.py / agent-file-protocol.md）；
       c) 注册表与登记层零命中（heartbeats/**）；

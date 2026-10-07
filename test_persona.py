@@ -9,6 +9,7 @@ test_wrap.py 钉**发射层与生命周期**（pi argv 逐格、就绪握手、�
 仅标准库（夹具的 cap.yml 用「标量键 + 流式数组」两种形态，与 test_wrap 同款极简序列化）。
 跑法：`python3 pi-wrap/test_persona.py`（退出码 0 = 全绿）。
 """
+import importlib.util
 import json
 import os
 import shutil
@@ -20,6 +21,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import persona                                                  # noqa: E402
+
+# 任务基线能力名的**单一事实源** = `bots/cap_lint.py::BASELINE_CAP`（提交期判据 E17 用它）
+# ⇒ 本文件按路径导入它、⛔ 抄第二份字面量（抄了就会在下次改名时静默漂成假红/假绿）。
+_spec = importlib.util.spec_from_file_location(
+    "cap_lint_persona_t", os.path.join(HERE, "..", "bots", "cap_lint.py"))
+_cap_lint = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_cap_lint)
+BASELINE_CAP = _cap_lint.BASELINE_CAP
 
 PASS = 0
 FAIL = 0
@@ -280,7 +289,7 @@ def p3_fallback():
            (r["fallback"], r["profile"], r["form"], r["model"]))
         ok("P3b 回落面注入面 = 回落 profile 的声明面（同一条解析路径，不另写平行分支）",
            r["caps"] == ["executor"] and r["appendParts"] == [EXEC_TEXT], r["caps"])
-        ok("P3c 排除集来自能力声明（caps/executor 的 excludeTools）而非形态基线",
+        ok("P3c 排除集来自能力声明（caps/executor-core 的 excludeTools）而非形态基线",
            r["excludeTools"] == ["ask_user"]
            and not any("形态基线" in w for w in r["warnings"]), r["excludeTools"])
         t.profile("res-empty", caps=[], model=None, form=persona.FORM_RESIDENT)
@@ -657,8 +666,8 @@ def p13_real_assets():
             bad.append((n, r["form"], "现网映射期望 %s" % REAL_FORMS[n]))
         if r["form"] == persona.FORM_TASK:
             # 安全不变量（声明面承担、cap_lint E17 提交期兜）：基线能力在首位 ∧ 排除 ask_user
-            if not r["caps"] or r["caps"][0] != "executor":
-                bad.append((n, r["form"], "caps 首位非 executor：%s" % r["caps"]))
+            if not r["caps"] or r["caps"][0] != BASELINE_CAP:
+                bad.append((n, r["form"], "caps 首位非基线能力 %s：%s" % (BASELINE_CAP, r["caps"])))
             if "ask_user" not in r["excludeTools"]:
                 bad.append((n, r["form"], "excludeTools 漏 ask_user：%s" % r["excludeTools"]))
         else:

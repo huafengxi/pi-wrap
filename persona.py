@@ -117,7 +117,7 @@ TOC_DEFAULT_KEEP_HEAD_CHARS = 4000          # （跨语言同源的钉桩 = pi-c
 TOC_DEFAULT_TOOLS = ("bash", "read", "grep", "find", "ls")   # tool-output-cap.test.mjs）
 
 # 安全不变量（task 档必带执行者基线人格 ∧ 必屏蔽 ask_user）**不住本层**：声明载体 =
-# `form: task` 的 profile 在 `caps` 首位列 `executor` + `bots/caps/executor/cap.yml` 的
+# `form: task` 的 profile 在 `caps` 首位列 `executor-core` + `bots/caps/executor-core/cap.yml` 的
 # `excludeTools: [ask_user]`；提交期判据（双向钉桩）= `bots/cap_lint.py` 的 E17。
 # 本层只承担一件形态派生行为 = task 档无 profile 名时的回落闸（TASK_FALLBACK_PROFILE）。
 
@@ -496,8 +496,8 @@ class Resolver:
         **形态（`self.form`）在本函数里定档**（单一来源 = profile 清单的 `form` 字段，见
         profile_form）。注入序 = profile 的 `caps` 列表序（平铺，能力不引用能力）；**本层不按形态
         前置任何能力、也不按形态排除任何工具**：安全不变量（task 档必带执行者基线人格 ∧ 必屏蔽
-        ask_user）的声明载体 = `form: task` 的 profile 在 `caps` 首位列 `executor` +
-        `bots/caps/executor/cap.yml` 的 `excludeTools: [ask_user]`，提交期判据（双向钉桩）=
+        ask_user）的声明载体 = `form: task` 的 profile 在 `caps` 首位列 `executor-core` +
+        `bots/caps/executor-core/cap.yml` 的 `excludeTools: [ask_user]`，提交期判据（双向钉桩）=
         `bots/cap_lint.py` 的 E17。`model` 只住 profile（能力层无此字段：复用单元不该决定运行
         环境）。降级：caps 缺失/非数组/元素非法 → WARN 逐项跳过。
         **未设 profile 名（∨ 名字非法 = 按未设处置）⇒ 回落 `TASK_FALLBACK_PROFILE`**（本层唯一的
