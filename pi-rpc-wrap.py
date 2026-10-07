@@ -158,6 +158,8 @@ import persona                                                # noqa: E402
 CONTEXT_COMPACTION_ENV = persona.CONTEXT_COMPACTION_ENV       # 归一化策略的注入通道（紧凑 JSON）；
                                                               # 写者 = profile-loader 扩展（会话内），
                                                               # 消费方 = bots/extensions/context-compaction/index.ts
+TOOL_OUTPUT_CAP_ENV = persona.TOOL_OUTPUT_CAP_ENV             # 同族的工具输出截断策略通道；写者同为
+                                                              # 注入层，消费方 = bots/extensions/tool-output-cap/index.ts
 PROFILE_LOADER_EXT_REL = "pi-core/agent/extensions/profile-loader.ts"   # 人格注入层（= ~/.pi/agent/
                                             # extensions/ 的自动发现面，被追踪 ⇒ 四机同步）；
                                             # 文件缺失 → WARN + 不注入（会话裸起、人格面缺席，
@@ -418,10 +420,12 @@ class Wrap:
         self.clear_ready_marks()       # 陈旧标记不得骗开本代就绪门（先于 pi 启动）
         argv = self.build_argv()
         env = dict(os.environ, SESSIOND_SESSION_FILE=self.session_file)
-        # 压缩策略的写者是人格注入层（它在会话内按 profile 的 `contextCompaction` 设这枚 env 并
-        # 装载执行体）⇒ 本层恒洗掉可能从宿主继承的陈旧值：「无策略 = env 不在场」是硬语义，
-        # 不靠调用方环境干净（否则一个陈旧值会让注入层装载的执行体误启用旧策略）。
+        # 压缩策略与工具输出截断策略的写者都是人格注入层（它在会话内按 profile 的
+        # `contextCompaction` / `toolOutputCap` 设这两枚 env 并装载执行体）⇒ 本层恒洗掉可能从宿主
+        # 继承的陈旧值：「无策略 = env 不在场」是硬语义，不靠调用方环境干净
+        # （否则一个陈旧值会让注入层装载的执行体误启用旧策略）。
         env.pop(CONTEXT_COMPACTION_ENV, None)
+        env.pop(TOOL_OUTPUT_CAP_ENV, None)
         if self.child_recv_injected:
             # 就绪门信号通道（只任务形态：resident 不注入子端扩展，其主端 receiver 行为不变）。
             env["AGENTD_WRAP_INIT_OK"] = self.init_ok_file

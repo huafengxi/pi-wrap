@@ -44,6 +44,9 @@ CLI（扩展侧 `execFileSync` 调用；**stdout = 一个 JSON 对象**，告警
     provider        str?   由 model 的 provider 段派生（`<provider>/<id>` 才派生）
     contextCompaction obj? 归一化策略（字段缺失/非法 = null）
     contextCompactionExt str? 执行体绝对路径（策略合法 ∧ 文件在场才给；两者同进同退）
+    toolOutputCap   obj?   归一化的工具输出截断策略（**缺省键填满** ⇒ env 里的紧凑 JSON 自足；
+                           字段缺失/非法 = null）
+    toolOutputCapExt str?  执行体绝对路径（与 `toolOutputCap` 同进同退）
     stats           obj    {promptChars,promptCount,skills,exts,knowledgeChars}
     warnings        [str]  降级项全文（与 stderr 告警同源，供会话内 `/persona` 自证）
 """
@@ -75,7 +78,8 @@ KB_INDEX_REL = "bots/kb_index.py"           # lore 资产清单 + 全局名字�
 CAPS_REL = "bots/caps"                      # 原子能力库：<名>/{cap.yml,prompt.md}（prompt.md 可缺省
                                             # = bundle 能力，只有捆绑声明）
 PROFILES_REL = "bots/profiles"              # profile 薄清单：<名>.json（字段只有 name/summary/notes/
-                                            # model/caps/contextCompaction，不直挂捆绑资产）
+                                            # model/caps/contextCompaction/toolOutputCap/cwd，
+                                            # 不直挂捆绑资产）
 SKILLS_REL = "bots/skills"                  # skill 共享库：cap.yml 按名捆绑，一级解析、不回落全局
 EXTS_REL = "bots/extensions"                # 扩展共享库：一个名字 = 一个扩展单元，一律 .ts
 TASK_FALLBACK_PROFILE = "executor"          # 未设 DISPATCH_PROFILE（∨ 名字非法 = 按未设处置）时
@@ -88,8 +92,8 @@ CAP_ALLOWED_FIELDS = frozenset({"summary", "skills", "extensions", "knowledge",
                                 "tools", "excludeTools"})   # cap.yml 合法键闭合集（禁 caps/model）
 PROFILE_BANNED_FIELDS = ("skills", "extensions", "knowledge", "tools",
                          "excludeTools")    # profile 只列 caps，不给逃生口 ⇒ 直挂即 WARN 忽略。
-                                            # `contextCompaction` 属运行环境/策略类字段（与 model
-                                            # 同类），不在本名单里、也不构成资产直挂的逃生口
+                                            # `contextCompaction`/`toolOutputCap`/`cwd` 属运行环境/策略类
+                                            # 字段（与 model 同类），不在本名单里、也不构成资产直挂的逃生口
 CONTEXT_COMPACTION_ENV = "AGENTD_CONTEXT_COMPACTION"   # 归一化策略的注入通道（紧凑 JSON），消费方 =
                                             # bots/extensions/context-compaction/index.ts
 CONTEXT_COMPACTION_EXT_REL = "bots/extensions/context-compaction/index.ts"   # 执行体（扩展单元）；
@@ -100,6 +104,17 @@ CC_FIELDS = ("enabled", "triggerTokens", "triggerRatio",
                                             # reserveTokens —— 不可达面（切点在 pi 的
                                             # prepareCompaction 内算定），见 cc_policy
 CC_INSTRUCTIONS_MAX = 2000                 # customInstructions 字符数上界（与 policy.ts 同口径）
+TOOL_OUTPUT_CAP_ENV = "AGENTD_TOOL_OUTPUT_CAP"   # 归一化截断策略的注入通道（紧凑 JSON），消费方 =
+                                            # bots/extensions/tool-output-cap/index.ts
+TOOL_OUTPUT_CAP_EXT_REL = "bots/extensions/tool-output-cap/index.ts"   # 执行体（扩展单元）；
+                                            # 文件缺失 → WARN + 不装配（照 contextCompaction 口径）
+TOC_FIELDS = ("enabled", "maxChars", "keepHeadChars",
+              "tools")                      # `toolOutputCap` 键白名单（白名单外一律非法：拼错的
+                                            # 键被静默忽略会改变语义）
+TOC_MIN_MAX_CHARS = 1000                    # maxChars 下界（再小就把「头+尾+标记行」挤成碎片）
+TOC_DEFAULT_MAX_CHARS = 6000                # 三枚缺省值与执行体侧 policy.ts 的 DEFAULT_* 逐字同值
+TOC_DEFAULT_KEEP_HEAD_CHARS = 4000          # （跨语言同源的钉桩 = pi-core/agent/extensions/tests/
+TOC_DEFAULT_TOOLS = ("bash", "read", "grep", "find", "ls")   # tool-output-cap.test.mjs）
 
 # 安全不变量（task 档必带执行者基线人格 ∧ 必屏蔽 ask_user）**不住本层**：声明载体 =
 # `form: task` 的 profile 在 `caps` 首位列 `executor` + `bots/caps/executor/cap.yml` 的
@@ -153,6 +168,59 @@ def cc_policy(raw):
             and "triggerRatio" not in out:
         return None, ("既无 triggerTokens 也无 triggerRatio（enabled 非 false 时至少给一个，"
                       "否则策略无触发点）")
+    return out, None
+
+
+def toc_policy(raw):
+    """profile 的 `toolOutputCap` 字段 → (归一化 dict ∨ None, 错误原因 ∨ None)。
+
+    判据表（单一事实源 = bots/README.md「人格资产」节；同口径的另两份实现 = lint 的 **E19** 与
+    执行体侧 `bots/extensions/tool-output-cap/policy.ts:parsePolicy`，三者必须同判）：
+      - 顶层非对象 / 含白名单外的键 ⇒ 非法（整块丢弃，不「忽略未知键」）；
+      - `enabled` 非 bool（缺省 true）⇒ 非法；
+      - `maxChars` 非整数 ∨ < TOC_MIN_MAX_CHARS ⇒ 非法；
+      - `keepHeadChars` 非正整数 ∨ **归一化后** ≥ `maxChars` ⇒ 非法（按归一化后的值判：只声明小
+        `maxChars` 而不显式给 `keepHeadChars` 时缺省值会 ≥ 它 ⇒ 尾段长度为零、错误信息的尾部会被剪光）；
+      - `tools` 非非空数组 ∨ 含非字符串/空白元素 ⇒ 非法（空白名单 = 对所有工具静默不生效，那是声明面
+        写错而不是「关掉」，关掉走 `enabled: false`）。
+    归一化输出 = **四枚键全部填满**（与 `cc_policy`「只含实际声明的键」不同）：本策略的消费侧要按
+    白名单与两个长度同时判定，缺省表填在两处必漂移 ⇒ 由装配层单点填满、env 里的 JSON 自足。
+    """
+    if not isinstance(raw, dict):
+        return None, "顶层非对象（%s）" % type(raw).__name__
+    unknown = [k for k in raw if k not in TOC_FIELDS]
+    if unknown:
+        return None, ("含白名单外的键 %s（合法键 = %s）"
+                      % (",".join(sorted(map(str, unknown))), "/".join(TOC_FIELDS)))
+    out = {"enabled": True, "maxChars": TOC_DEFAULT_MAX_CHARS,
+           "keepHeadChars": TOC_DEFAULT_KEEP_HEAD_CHARS, "tools": list(TOC_DEFAULT_TOOLS)}
+    if "enabled" in raw:
+        if not isinstance(raw["enabled"], bool):
+            return None, "enabled 非布尔（%.40r）" % (raw["enabled"],)
+        out["enabled"] = raw["enabled"]
+    if "maxChars" in raw:
+        v = raw["maxChars"]
+        if isinstance(v, bool) or not isinstance(v, int) or v < TOC_MIN_MAX_CHARS:
+            return None, "maxChars 非 ≥%d 的整数（%.40r）" % (TOC_MIN_MAX_CHARS, v)
+        out["maxChars"] = v
+    if "keepHeadChars" in raw:
+        v = raw["keepHeadChars"]
+        if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+            return None, "keepHeadChars 非正整数（%.40r）" % (v,)
+        out["keepHeadChars"] = v
+    if out["keepHeadChars"] >= out["maxChars"]:
+        return None, ("keepHeadChars（%d）必须 < maxChars（%d）：否则尾段长度为零"
+                      "（只声明小 maxChars 时也要显式给 keepHeadChars）"
+                      % (out["keepHeadChars"], out["maxChars"]))
+    if "tools" in raw:
+        v = raw["tools"]
+        if not isinstance(v, list) or not v:
+            return None, ("tools 非非空数组（%.40r）；要关掉本策略写 enabled: false"
+                          % (v,))
+        for item in v:
+            if not isinstance(item, str) or not item.strip():
+                return None, "tools 含非字符串/空白元素（%.40r）" % (item,)
+        out["tools"] = [x.strip() for x in v]
     return out, None
 
 
@@ -243,11 +311,13 @@ class Resolver:
             "provider": None,
             "contextCompaction": None,
             "contextCompactionExt": None,
+            "toolOutputCap": None,
+            "toolOutputCapExt": None,
             "stats": {"promptChars": 0, "promptCount": 0, "skills": 0,
                       "exts": 0, "knowledgeChars": 0},
             "warnings": self.warnings,
         }
-        caps, model, pname, cc, fallback = self.resolve_caps(profile_raw)
+        caps, model, pname, cc, toc, fallback = self.resolve_caps(profile_raw)
         out["profile"], out["fallback"] = pname, fallback
         out["form"] = self.form          # 形态在 resolve_caps 里定档（来源 = profile 的 `form`）
         out["caps"] = caps
@@ -261,6 +331,7 @@ class Resolver:
                       repr(pname) if pname else "（未设）", model or "（缺省）",
                       out["provider"] or "（缺省）")
             self._assemble_cc(out, cc)
+            self._assemble_toc(out, toc)
             out["warnings"] = list(self.warnings)
             return out
 
@@ -309,6 +380,7 @@ class Resolver:
 
         # contextCompaction（profile 级运行环境字段；两形态同等，策略住 profile、与形态无关）
         self._assemble_cc(out, cc)
+        self._assemble_toc(out, toc)
         out["warnings"] = list(self.warnings)
         return out
 
@@ -329,6 +401,24 @@ class Resolver:
         self.emit("contextCompaction 装配：trigger=%s ratio=%s enabled=%s ext=%s",
                   cc.get("triggerTokens", "（未设）"), cc.get("triggerRatio", "（未设）"),
                   cc.get("enabled", True), ext)
+
+    def _assemble_toc(self, out, toc):
+        """工具输出截断策略的装配（形态照 `_assemble_cc`：单一实现、零 cap 的早退分支与常规分支
+        都调它；策略与路径同进同退；执行体缺失 = WARN + 不装配，fail-soft：会话照起，工具输出
+        逐字不变）。与压缩策略不同的一面：本策略**对 task 形态也即时生效**（`tool_result` 在轮内
+        逐枚触发，不依赖会话有空闲窗）。"""
+        if not toc:
+            return
+        ext = os.path.join(self.root, TOOL_OUTPUT_CAP_EXT_REL)
+        if not os.path.isfile(ext):
+            self.emit("WARN: toolOutputCap 执行体缺失，跳过装配（策略已声明但装配不上；"
+                      "会话照起，工具输出逐字不变）: %s", ext)
+            return
+        out["toolOutputCap"] = toc
+        out["toolOutputCapExt"] = ext
+        self.emit("toolOutputCap 装配：maxChars=%s keepHeadChars=%s enabled=%s tools=%s ext=%s",
+                  toc["maxChars"], toc["keepHeadChars"], toc["enabled"],
+                  ",".join(toc["tools"]), ext)
 
     # ---------- profile 薄清单 ----------
 
@@ -400,7 +490,8 @@ class Resolver:
         return raw.strip()
 
     def resolve_caps(self, profile_raw):
-        """profile 名 → (能力名有序列表, model ∨ None, profile 名 ∨ None, cc 策略 ∨ None, 是否回落)。
+        """profile 名 → (能力名有序列表, model ∨ None, profile 名 ∨ None, cc 策略 ∨ None,
+        toc 策略 ∨ None, 是否回落)。
 
         **形态（`self.form`）在本函数里定档**（单一来源 = profile 清单的 `form` 字段，见
         profile_form）。注入序 = profile 的 `caps` 列表序（平铺，能力不引用能力）；**本层不按形态
@@ -424,7 +515,7 @@ class Resolver:
             # **绝不 die**——硬失败会自锁（连「修这条路径」的修复任务都起不来）。降级全靠下面
             # 既有的 `load_profile_doc` / model 类型分支承担，本处不重复实现。
             name, fallback = TASK_FALLBACK_PROFILE, True
-        caps, model, cc = [], None, None
+        caps, model, cc, toc = [], None, None, None
         doc = self.load_profile_doc(name) if name else None
         self.form = self.profile_form(doc, name)
         if doc is not None:
@@ -459,6 +550,15 @@ class Resolver:
                               name, err, CONTEXT_COMPACTION_ENV)
                 else:
                     cc = pol
+            if "toolOutputCap" in doc:
+                pol, err = toc_policy(doc.get("toolOutputCap"))
+                if pol is None:
+                    # 与 contextCompaction 同口径：会话照起，只是策略不生效（工具输出逐字不变）。
+                    self.emit("WARN: profile %r 的 toolOutputCap 非法（%s）⇒ 不装配"
+                              "（不注入 %s 与执行体；会话照起，工具输出逐字不变）",
+                              name, err, TOOL_OUTPUT_CAP_ENV)
+                else:
+                    toc = pol
         if fallback:
             # 回落一条日志（事后可从 run/logs/* 归因「这个任务的 model 从哪来」）；拿不到 model
             # 时升为 WARN（fail-soft 分支：不注入 model、不硬失败）。
@@ -470,7 +570,7 @@ class Resolver:
                           "（清单缺失/损坏/无 model 字段/类型非法，成因见上方告警）⇒ 不切模型，"
                           "落回 settings 默认（fail-soft：本路径影响所有任务 spawn，硬失败会自锁）",
                           self.form, name)
-        return caps, model, name, cc, fallback
+        return caps, model, name, cc, toc, fallback
 
     # ---------- 能力单元 ----------
 

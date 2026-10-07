@@ -93,7 +93,8 @@ if FLAG_DIR:
     # 缺键记 None（与空串区分：空串 = 传了但值为空，None = 根本没传）。
     _atomic_write_flag("persona_env", {k: os.environ.get(k) for k in (
         "DISPATCH_PROFILE", "AGENTD_RESIDENT", "AGENTD_SESSION_NAME",
-        "AGENT_ROOT", "AGENT_SELF", "AGENTD_CONTEXT_COMPACTION")})
+        "AGENT_ROOT", "AGENT_SELF", "AGENTD_CONTEXT_COMPACTION",
+        "AGENTD_TOOL_OUTPUT_CAP")})
 
 
 def turn(rid, command, settle=True):

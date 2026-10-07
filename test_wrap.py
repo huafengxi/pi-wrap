@@ -1514,7 +1514,8 @@ def t48_persona_emission():
       b) 输入 env 透传：DISPATCH_PROFILE / AGENTD_RESIDENT / AGENT_ROOT / AGENT_SELF 原样到子进程
          （人格输入只有 DISPATCH_PROFILE 一枚：会话形态住 profile 清单的 `form` 字段，
          AGENTD_RESIDENT 只作「常驻标记」= 注入层的监督判据 + 本脚本的完成收敛形态）；
-      c) 陈旧的 AGENTD_CONTEXT_COMPACTION 被洗掉（「无策略 = env 不在场」是硬语义，写者是注入层）；
+      c) 陈旧的 AGENTD_CONTEXT_COMPACTION ∨ AGENTD_TOOL_OUTPUT_CAP 被洗掉（「无策略 = env 不在场」
+         是硬语义，两者的写者都是注入层）；
       d) 注入层缺失 ⇒ WARN 点名 + 不注入 + **会话照常收敛 exit 0**（fail-soft：绝不 die，
          硬失败会自锁）、无诊断；
       e) resident 形态同样注入注入层（策略/人格住 profile，与形态无关），且不注入 CHILD_EXTS。
@@ -1568,6 +1569,20 @@ def t48_persona_emission():
         pe = e.read_persona_env() or {}
         ok("T48c 宿主带来的陈旧 AGENTD_CONTEXT_COMPACTION 被洗掉（写者只能是注入层）",
            "AGENTD_CONTEXT_COMPACTION" not in pe or pe.get("AGENTD_CONTEXT_COMPACTION") is None,
+           json.dumps(pe, ensure_ascii=False))
+    finally:
+        e.cleanup([p])
+
+    # ③b 陈旧的工具输出截断策略 env 同样被洗掉（与压缩策略同款硬语义）
+    e = Env("t48c2", extra_env={"DISPATCH_PROFILE": "review",
+                                "AGENTD_TOOL_OUTPUT_CAP": '{"enabled":true,"maxChars":6000}'})
+    _mk_loader(e.root)
+    p = e.start_wrap()
+    try:
+        p.wait(timeout=20)
+        pe = e.read_persona_env() or {}
+        ok("T48c2 宿主带来的陈旧 AGENTD_TOOL_OUTPUT_CAP 被洗掉（写者只能是注入层）",
+           "AGENTD_TOOL_OUTPUT_CAP" in pe and pe.get("AGENTD_TOOL_OUTPUT_CAP") is None,
            json.dumps(pe, ensure_ascii=False))
     finally:
         e.cleanup([p])

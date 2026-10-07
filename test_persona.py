@@ -165,7 +165,7 @@ SCHEMA_KEYS = {
     "schemaVersion", "form", "profile", "fallback", "caps", "appendParts",
     "appendJoiner", "promptStats", "skillPaths", "extensionPaths", "tools",
     "excludeTools", "model", "provider", "contextCompaction",
-    "contextCompactionExt", "stats", "warnings",
+    "contextCompactionExt", "toolOutputCap", "toolOutputCapExt", "stats", "warnings",
 }
 
 
@@ -956,11 +956,89 @@ def p17_form_axis():
         t.cleanup()
 
 
+# ---------- P18 toolOutputCap 判据表（与 lint E19 / policy.ts 同判） ----------
+
+def p18_toc():
+    good = [{}, {"maxChars": 6000, "keepHeadChars": 4000}, {"enabled": False},
+            {"maxChars": 1000, "keepHeadChars": 1}, {"tools": ["bash"]},
+            {"enabled": True, "maxChars": 8000, "keepHeadChars": 2000,
+             "tools": ["bash", "read"]}]
+    bad = [{"maxChars": 999}, {"maxChars": 0}, {"maxChars": "6000"}, {"maxChars": 6000.5},
+           {"maxChars": True}, {"keepHeadChars": 0}, {"keepHeadChars": "4000"},
+           {"enabled": "yes"},
+           {"maxChars": 1000},                     # 缺省 keepHeadChars 4000 ≥ 它 ⇒ 尾段为零
+           {"maxChars": 2000, "keepHeadChars": 3000}, {"tools": []}, {"tools": "bash"},
+           {"tools": ["bash", 3]}, {"tools": ["  "]}, {"maxChars": 6000, "unknownKey": 1},
+           "not-a-dict", None, 7, []]
+    bad_g = [g for g in good if persona.toc_policy(g)[0] is None]
+    bad_b = [b for b in bad if persona.toc_policy(b)[0] is not None]
+    ok("P18a %d 个合法形态全部通过" % len(good), not bad_g, bad_g)
+    ok("P18b %d 个非法形态全部拒绍且给出原因（白名单外键整块丢弃、不「忽略未知键」）" % len(bad),
+       not bad_b and all(persona.toc_policy(b)[1] for b in bad), bad_b)
+    pol, err = persona.toc_policy({"maxChars": 8000})
+    ok("P18c 归一化**四枚键全填满**（与 cc_policy「只留声明键」不同：消费侧要同时用白名单与两个长度，"
+       "缺省表填两处必漂移）",
+       pol == {"enabled": True, "maxChars": 8000,
+               "keepHeadChars": persona.TOC_DEFAULT_KEEP_HEAD_CHARS,
+               "tools": list(persona.TOC_DEFAULT_TOOLS)} and err is None, (pol, err))
+
+    t = Tree("p18")
+    try:
+        t.cap("executor", EXEC_TEXT)
+        ext = os.path.join(t.root, persona.TOOL_OUTPUT_CAP_EXT_REL)
+        t.profile("p", caps=["executor"], model="p/m",
+                  extra={"toolOutputCap": {"maxChars": 6000, "keepHeadChars": 4000}})
+        r = t.resolve(profile="p")
+        ok("P18d 执行体缺失 ⇒ 策略与路径同进同退（都为空）+ WARN 点名",
+           r["toolOutputCap"] is None and r["toolOutputCapExt"] is None
+           and any("执行体缺失" in w for w in r["warnings"]), r["warnings"])
+        _w(ext, "export default function () {}\n")
+        r2 = t.resolve(profile="p")
+        ok("P18e 执行体在场 ⇒ 归一化策略 + 绕对路径同时给出",
+           r2["toolOutputCap"] == {"enabled": True, "maxChars": 6000, "keepHeadChars": 4000,
+                                   "tools": list(persona.TOC_DEFAULT_TOOLS)}
+           and r2["toolOutputCapExt"] == ext,
+           (r2["toolOutputCap"], r2["toolOutputCapExt"]))
+        t.profile("q", caps=["executor"], model="p/m",
+                  extra={"toolOutputCap": {"maxChars": 100}})
+        r3 = t.resolve(profile="q")
+        ok("P18f 策略非法 ⇒ WARN 点名成因 + 不装配（会话照起、工具输出逐字不变）",
+           r3["toolOutputCap"] is None and r3["toolOutputCapExt"] is None
+           and any("toolOutputCap 非法" in w and "maxChars" in w for w in r3["warnings"]),
+           r3["warnings"])
+        t.profile("p-zero", caps=[], model="p/m", form=persona.FORM_INTERACTIVE,
+                  extra={"toolOutputCap": {"maxChars": 3000, "keepHeadChars": 1000}})
+        rz = t.resolve(profile="p-zero")
+        ok("P18g 零 cap 的早退分支同等装配策略（运行环境字段与能力面无关）",
+           rz["caps"] == [] and rz["toolOutputCap"]["maxChars"] == 3000
+           and rz["toolOutputCapExt"] == ext,
+           (rz["caps"], rz["toolOutputCap"], rz["toolOutputCapExt"]))
+        t.profile("q-zero", caps=[], model="p/m", form=persona.FORM_INTERACTIVE)
+        t.profile("q-task", caps=["executor"], model="p/m")
+        rz2, rt2 = t.resolve(profile="q-zero"), t.resolve(profile="q-task")
+        ok("P18h 未声明策略 ⇒ 两键同为空（零注入零行为变更；早退分支与常规分支同判）",
+           rz2["toolOutputCap"] is None and rz2["toolOutputCapExt"] is None
+           and rt2["toolOutputCap"] is None and rt2["toolOutputCapExt"] is None
+           and not any("toolOutputCap" in w for w in rt2["warnings"]),
+           (rz2["toolOutputCap"], rt2["toolOutputCap"], rt2["warnings"]))
+        ok("P18i 常量与执行体侧同源的判据面（env 名 + 执行体相对路径 + 两枚缺省值）",
+           persona.TOOL_OUTPUT_CAP_ENV == "AGENTD_TOOL_OUTPUT_CAP"
+           and persona.TOOL_OUTPUT_CAP_EXT_REL == "bots/extensions/tool-output-cap/index.ts"
+           and persona.TOC_MIN_MAX_CHARS == 1000
+           and persona.TOC_DEFAULT_MAX_CHARS == 6000
+           and persona.TOC_DEFAULT_KEEP_HEAD_CHARS == 4000
+           and persona.TOC_FIELDS == ("enabled", "maxChars", "keepHeadChars", "tools"),
+           repr((persona.TOOL_OUTPUT_CAP_ENV, persona.TOOL_OUTPUT_CAP_EXT_REL,
+                 persona.TOC_FIELDS)))
+    finally:
+        t.cleanup()
+
+
 def main():
     for fn in (p1_contract, p2_caps, p2b_bundle_and_missing, p3_fallback, p4_knowledge,
                p5_tools, p6_bundles, p8_provider, p9_cc, p10_warnings, p11_equivalence,
                p12_cli, p13_real_assets, p14_knowledge_tiers,
-               p15_profile_banned_fields, p16_cap_degradation, p17_form_axis):
+               p15_profile_banned_fields, p16_cap_degradation, p17_form_axis, p18_toc):
         print("---- %s" % fn.__name__)
         fn()
     print("==== persona 单测：%d passed, %d failed" % (PASS, FAIL))

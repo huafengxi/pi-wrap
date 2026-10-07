@@ -213,6 +213,7 @@ def main():
     else:
         env.pop("PI_CODING_AGENT_DIR", None)
     env.pop("AGENTD_CONTEXT_COMPACTION", None)
+    env.pop("AGENTD_TOOL_OUTPUT_CAP", None)
 
     probe = os.path.join(root, "probe", "toolface-probe.ts")
     loader = os.path.join(root, LOADER_REL)
