@@ -77,9 +77,8 @@ KB_INDEX_REL = "bots/kb_index.py"           # lore 资产清单 + 全局名字�
                                             # knowledge 名 → 「知识清单」注入块（三档渲染）
 CAPS_REL = "bots/caps"                      # 原子能力库：<名>/{cap.yml,prompt.md}（prompt.md 可缺省
                                             # = bundle 能力，只有捆绑声明）
-PROFILES_REL = "bots/profiles"              # profile 薄清单：<名>.json（字段只有 name/summary/notes/
-                                            # model/caps/contextCompaction/toolOutputCap/cwd，
-                                            # 不直挂捆绑资产）
+PROFILES_REL = "bots/profiles"              # profile 薄清单：<名>.json（字段集单点 = `bots/cap_lint.py`
+                                            # 的 PROFILE_FIELDS；不直挂捆绑资产）
 SKILLS_REL = "bots/skills"                  # skill 共享库：cap.yml 按名捆绑，一级解析、不回落全局
 EXTS_REL = "bots/extensions"                # 扩展共享库：一个名字 = 一个扩展单元，一律 .ts
 TASK_FALLBACK_PROFILE = "executor"          # 未设 DISPATCH_PROFILE（∨ 名字非法 = 按未设处置）时
