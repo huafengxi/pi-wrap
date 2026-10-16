@@ -110,7 +110,8 @@ AGENTD_DIR = os.environ.get("AGENTD_DIR") or os.path.join(
 for _p in (_HERE, AGENTD_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
-import proto  # noqa: E402
+import proto
+from wait_state import CurrentWaits, DIALOG_METHODS  # noqa: E402
 from task_state import report_nonempty
 
 RING_MAX = 200            # 小环容量（行）：新连接短窗回放，完整基线走 get_entries
@@ -243,6 +244,7 @@ class Wrap:
         self.warned_oversize = False   # 丢弃事件的 WARN 去重（每进程只打一次，见 _read_stdout）
         self.warned_badjson = False    # 同上：非 JSON 行分支
         self.srv = None
+        self.waits = CurrentWaits(self.home, self.task_id)
 
     # ---------- socket 生命周期 ----------
 
@@ -649,6 +651,10 @@ class Wrap:
                 self.pi.stdin.write(
                     raw_line if raw_line.endswith(b"\n") else raw_line + b"\n")
                 self.pi.stdin.flush()
+                try:
+                    self.waits.sent(json.loads(raw_line))
+                except (ValueError, TypeError):
+                    pass
                 return True
             except (OSError, ValueError):
                 self.stdin_open = False
@@ -679,15 +685,6 @@ class Wrap:
                             "若其中含 agent_end，inflight 会泄漏、收敛改由 hang 看门狗"
                             "收口。本告警每进程只打一次")
                     continue                     # 单行上限（对齐 sessiond 口径）
-                self.ring.append(raw)
-                with self.lock:
-                    c = self.conn
-                if c is not None:
-                    try:
-                        with self.send_lock:
-                            c.sendall(raw)
-                    except OSError:
-                        self._drop_conn(c)
                 try:
                     obj = json.loads(raw)
                 except ValueError:
@@ -698,12 +695,24 @@ class Wrap:
                             "若其中含 agent_end，inflight 会泄漏、收敛改由 hang 看门狗"
                             "收口。本告警每进程只打一次")
                     continue
-                if isinstance(obj, dict):
-                    self._on_event(obj)
+                # Serialize live delivery with attach replay. Current waits
+                # are maintained even when no browser/socket is connected.
+                with self.send_lock:
+                    if isinstance(obj, dict):
+                        self._on_event(obj)
+                    self.ring.append(raw)
+                    with self.lock:
+                        c = self.conn
+                    if c is not None:
+                        try:
+                            c.sendall(raw)
+                        except OSError:
+                            self._drop_conn(c)
         except (OSError, ValueError):
             pass
 
     def _on_event(self, obj):
+        self.waits.event(obj)
         t = obj.get("type")
         if t == "response" and obj.get("id", "").startswith("init-"):
             self.init_resp = obj
@@ -769,16 +778,15 @@ class Wrap:
                 conn, _ = self.srv.accept()
             except OSError:
                 return
-            with self.lock:
-                old = self.conn
-                self.conn = conn
-            if old is not None:
-                # shutdown 先：close 不会唤醒对端/本端阻塞中的 recv（经典坑），
-                # 半开连接会一直挂着；shutdown 双向关闭才能把 EOF 送达两端。
-                self._shutdown_close(old)
+            old = None
             try:
                 with self.send_lock:
-                    for raw in list(self.ring):  # 小环回放（短窗补缺，基线走 get_entries）
+                    with self.lock:
+                        old = self.conn
+                        self.conn = conn
+                    if old is not None:
+                        self._shutdown_close(old)
+                    for raw in self.replay_lines():
                         conn.sendall(raw)
             except OSError:
                 self._drop_conn(conn)
@@ -786,6 +794,21 @@ class Wrap:
             log("观测连接就位（替换=%s）", old is not None)
             threading.Thread(target=self._conn_relay, args=(conn,),
                              daemon=True, name="wrap-relay").start()
+
+    def replay_lines(self):
+        # Raw event history is not a dialog baseline. Resolved/expired requests
+        # must not be resurrected; live requests survive ring eviction.
+        for raw in list(self.ring):
+            try:
+                obj = json.loads(raw)
+            except ValueError:
+                continue
+            if (isinstance(obj, dict) and obj.get("type") == "extension_ui_request"
+                    and obj.get("method") in DIALOG_METHODS):
+                continue
+            yield raw
+        for request in self.waits.dialogs():
+            yield (json.dumps(request, ensure_ascii=False) + "\n").encode("utf-8")
 
     def _conn_relay(self, conn):
         buf = b""
