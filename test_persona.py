@@ -167,7 +167,7 @@ class Tree:
 SCHEMA_KEYS = {
     "schemaVersion", "form", "profile", "fallback", "caps", "appendParts",
     "appendJoiner", "promptStats", "skillPaths", "extensionPaths", "tools",
-    "excludeTools", "model", "provider", "contextCompaction",
+    "excludeTools", "model", "thinkingLevel", "provider", "contextCompaction",
     "contextCompactionExt", "toolOutputCap", "toolOutputCapExt", "stats", "warnings",
 }
 
@@ -182,7 +182,7 @@ def p1_contract():
         r = t.resolve(profile="executor")
         ok("P1a 键集与模块头 schema 逐字一致（跨仓契约 pin）",
            set(r.keys()) == SCHEMA_KEYS, sorted(set(r.keys()) ^ SCHEMA_KEYS))
-        ok("P1b schemaVersion = 1", r["schemaVersion"] == 1, r["schemaVersion"])
+        ok("P1b schemaVersion = 2", r["schemaVersion"] == 2, r["schemaVersion"])
         ok("P1c appendJoiner = pi 的多值拼接符 \\n\\n",
            r["appendJoiner"] == "\n\n", repr(r["appendJoiner"]))
         ok("P1d JSON 可序列化（扩展侧读的就是这个）",

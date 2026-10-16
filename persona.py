@@ -41,6 +41,7 @@ CLI（扩展侧 `execFileSync` 调用；**stdout = 一个 JSON 对象**，告警
     tools           [str]  ∪(声明者 tools)；空 = 未声明（不发白名单）
     excludeTools    [str]  ∪(声明者 excludeTools)
     model           str?   profile 的 `model`（能力层无此字段）
+    thinkingLevel   str?   profile 默认思考等级；未声明/非法 = null，不改变 pi 行为
     provider        str?   由 model 的 provider 段派生（`<provider>/<id>` 才派生）
     contextCompaction obj? 归一化策略（字段缺失/非法 = null）
     contextCompactionExt str? 执行体绝对路径（策略合法 ∧ 文件在场才给；两者同进同退）
@@ -55,7 +56,15 @@ import json
 import os
 import sys
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# pi 官方 thinking 等级；lint 的同值判据与跨语言测试须同批更新。
+THINKING_LEVELS = ("off", "minimal", "low", "medium", "high", "xhigh", "max")
+
+
+def thinking_level(value):
+    """严格枚举：不把 null、空白、大小写错误当有效声明。"""
+    return value if isinstance(value, str) and value in THINKING_LEVELS else None
 
 FORM_TASK = "task"
 FORM_RESIDENT = "resident"
@@ -307,6 +316,7 @@ class Resolver:
             "tools": [],
             "excludeTools": [],
             "model": None,
+            "thinkingLevel": None,
             "provider": None,
             "contextCompaction": None,
             "contextCompactionExt": None,
@@ -316,11 +326,12 @@ class Resolver:
                       "exts": 0, "knowledgeChars": 0},
             "warnings": self.warnings,
         }
-        caps, model, pname, cc, toc, fallback = self.resolve_caps(profile_raw)
+        caps, model, pname, cc, toc, thinking, fallback = self.resolve_caps(profile_raw)
         out["profile"], out["fallback"] = pname, fallback
         out["form"] = self.form          # 形态在 resolve_caps 里定档（来源 = profile 的 `form`）
         out["caps"] = caps
         out["model"] = model
+        out["thinkingLevel"] = thinking
         out["provider"] = provider_of_model(model)
         # 零 cap 同样走公共收口，运行环境策略的装配不依赖能力声明。
         kb_entries, t_list, xt_decl = [], [], []
@@ -480,7 +491,7 @@ class Resolver:
 
     def resolve_caps(self, profile_raw):
         """profile 名 → (能力名有序列表, model ∨ None, profile 名 ∨ None, cc 策略 ∨ None,
-        toc 策略 ∨ None, 是否回落)。
+        toc 策略 ∨ None, thinkingLevel ∨ None, 是否回落)。
 
         **形态（`self.form`）在本函数里定档**（单一来源 = profile 清单的 `form` 字段，见
         profile_form）。注入序 = profile 的 `caps` 列表序（平铺，能力不引用能力）；**本层不按形态
@@ -504,7 +515,7 @@ class Resolver:
             # **绝不 die**——硬失败会自锁（连「修这条路径」的修复任务都起不来）。降级全靠下面
             # 既有的 `load_profile_doc` / model 类型分支承担，本处不重复实现。
             name, fallback = TASK_FALLBACK_PROFILE, True
-        caps, model, cc, toc = [], None, None, None
+        caps, model, cc, toc, thinking = [], None, None, None, None
         doc = self.load_profile_doc(name) if name else None
         self.form = self.profile_form(doc, name)
         if doc is not None:
@@ -529,6 +540,11 @@ class Resolver:
                 model = m.strip()
             elif m is not None:
                 self.emit("WARN: profile %r 的 model 字段非非空字符串，跳过 model 注入", name)
+            if "thinkingLevel" in doc:
+                thinking = thinking_level(doc["thinkingLevel"])
+                if thinking is None:
+                    self.emit("WARN: profile %r 的 thinkingLevel 非法（允许 %s），跳过思考等级注入",
+                              name, "/".join(THINKING_LEVELS))
             if "contextCompaction" in doc:
                 pol, err = cc_policy(doc.get("contextCompaction"))
                 if pol is None:
@@ -559,7 +575,7 @@ class Resolver:
                           "（清单缺失/损坏/无 model 字段/类型非法，成因见上方告警）⇒ 不切模型，"
                           "落回 settings 默认（fail-soft：本路径影响所有任务 spawn，硬失败会自锁）",
                           self.form, name)
-        return caps, model, name, cc, toc, fallback
+        return caps, model, name, cc, toc, thinking, fallback
 
     # ---------- 能力单元 ----------
 
