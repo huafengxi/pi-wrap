@@ -97,7 +97,7 @@ Injected by the supervisor (and scrubbed of inherited scheduler identity first):
 | `AGENT_HOME` | this participant's directory (`agents/task/<id>/`, `agents/bot/<name>/`) |
 | `AGENT_SELF` | path-style participant id (`task/<id>`, `bot/<name>`, `topic/<id>`) |
 | `AGENTD_TASK` | recursion guard: set for task-shaped sessions, absent for resident ones |
-| `AGENTD_RESIDENT` | `1` = resident session (no completion convergence; also one of the injection layer's "agentd-supervised" tests — not the persona form axis, which lives in the profile's `form` field) |
+| `AGENTD_RESIDENT` | Runner injects `1` from `spec.resident=true` = resident session (no completion convergence; also one of the injection layer's "agentd-supervised" tests — not the persona form axis, which lives in the profile's `form` field) |
 | `AGENTD_SESSION_NAME` | pinned session name for resident spawns |
 | `DISPATCH_PROFILE` | thin profile to assemble (ordered capability list) |
 | `AGENTD_WRAP_*` | per-run overrides: `PI_BIN`, `INIT_OK`, `RECV_ARMED`, `INIT_TIMEOUT`, `ARM_TIMEOUT`, `SETTLE_WINDOW`, `EXIT_GRACE` |
