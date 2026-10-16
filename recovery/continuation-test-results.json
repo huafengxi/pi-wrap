@@ -1,0 +1,222 @@
+{
+  "agentd_revision": "ca35c53c6bd9c437615058126c5bcd2f97de2801",
+  "bash32": "GNU bash, version 3.2.0(2)-release (x86_64-unknown-linux-gnu)",
+  "caller_input_sha256": {
+    "tasks/run.py": "4ca6f2eccc23dfd7069a85d48023f819cc8cd529bc81b20367a9a32c1db6b1a0",
+    "pi-core/agent/extensions/agentd/core.ts": "acb469ab7f6c43ba33b88bf9828f99a2309d3254ce2de789f8543703e6fc261a"
+  },
+  "test_enumeration": [
+    "test_dependency.py",
+    "test_fakepi.py",
+    "test_layout_integration.py",
+    "test_persona.py",
+    "test_platform_paths.py",
+    "test_thinking.py",
+    "test_wrap.py"
+  ],
+  "tests": [
+    {
+      "layout": "sibling",
+      "test": "test_dependency.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_dependency.py"
+      ],
+      "returncode": 0,
+      "log": "sibling-00-test_dependency.py.log",
+      "skip_lines": []
+    },
+    {
+      "layout": "sibling",
+      "test": "test_fakepi.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_fakepi.py"
+      ],
+      "returncode": 0,
+      "log": "sibling-01-test_fakepi.py.log",
+      "skip_lines": []
+    },
+    {
+      "layout": "sibling",
+      "test": "test_layout_integration.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_layout_integration.py"
+      ],
+      "returncode": 0,
+      "log": "sibling-02-test_layout_integration.py.log",
+      "skip_lines": []
+    },
+    {
+      "layout": "sibling",
+      "test": "test_persona.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_persona.py"
+      ],
+      "returncode": 0,
+      "log": "sibling-03-test_persona.py.log",
+      "skip_lines": [
+        "P14 caller kb-index not included in synthetic inputs; not an executed PASS"
+      ],
+      "executed_pass_assertions": 85,
+      "skipped_assertions": 1,
+      "legacy_reported_pass_assertions": 86
+    },
+    {
+      "layout": "sibling",
+      "test": "test_platform_paths.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_platform_paths.py"
+      ],
+      "returncode": 0,
+      "log": "sibling-04-test_platform_paths.py.log",
+      "skip_lines": []
+    },
+    {
+      "layout": "sibling",
+      "test": "test_thinking.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_thinking.py"
+      ],
+      "returncode": 0,
+      "log": "sibling-05-test_thinking.py.log",
+      "skip_lines": []
+    },
+    {
+      "layout": "sibling",
+      "test": "test_wrap.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_wrap.py"
+      ],
+      "returncode": 0,
+      "log": "sibling-06-test_wrap.py.log",
+      "skip_lines": []
+    },
+    {
+      "layout": "explicit",
+      "test": "test_dependency.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_dependency.py"
+      ],
+      "returncode": 0,
+      "log": "explicit-00-test_dependency.py.log",
+      "skip_lines": []
+    },
+    {
+      "layout": "explicit",
+      "test": "test_fakepi.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_fakepi.py"
+      ],
+      "returncode": 0,
+      "log": "explicit-01-test_fakepi.py.log",
+      "skip_lines": []
+    },
+    {
+      "layout": "explicit",
+      "test": "test_layout_integration.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_layout_integration.py"
+      ],
+      "returncode": 0,
+      "log": "explicit-02-test_layout_integration.py.log",
+      "skip_lines": []
+    },
+    {
+      "layout": "explicit",
+      "test": "test_persona.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_persona.py"
+      ],
+      "returncode": 0,
+      "log": "explicit-03-test_persona.py.log",
+      "skip_lines": [
+        "P14 caller kb-index not included in synthetic inputs; not an executed PASS"
+      ],
+      "executed_pass_assertions": 85,
+      "skipped_assertions": 1,
+      "legacy_reported_pass_assertions": 86
+    },
+    {
+      "layout": "explicit",
+      "test": "test_platform_paths.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_platform_paths.py"
+      ],
+      "returncode": 0,
+      "log": "explicit-04-test_platform_paths.py.log",
+      "skip_lines": []
+    },
+    {
+      "layout": "explicit",
+      "test": "test_thinking.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_thinking.py"
+      ],
+      "returncode": 0,
+      "log": "explicit-05-test_thinking.py.log",
+      "skip_lines": []
+    },
+    {
+      "layout": "explicit",
+      "test": "test_wrap.py",
+      "command": [
+        "python",
+        "-B",
+        "<layout-checkout>/test_wrap.py"
+      ],
+      "returncode": 0,
+      "log": "explicit-06-test_wrap.py.log",
+      "skip_lines": []
+    }
+  ],
+  "excluded": [
+    "live toolface/model driver",
+    "clean.sh deletion body",
+    "production/macOS/multihost integration"
+  ],
+  "status": "PASS for bounded dependency continuation; independent review/production not claimed",
+  "taskId": "rd6-p-cont-191456",
+  "previous_candidate": "eb213ea103416c82bcbe57003047aa608dbf7443",
+  "previous_agentd_pin": "9625bdc15f853e49a6312d20dc429e23330e3d89",
+  "history": "Old BLOCKED results retained in test-results.json, not relabeled.",
+  "scope": "All seven applicable test_*.py run in both layouts; no model/production/macOS/multihost tests",
+  "initial_runs": [
+    {
+      "run": "baseline unmodified test_wrap",
+      "result": "212 pass / 2 missing static caller inputs"
+    },
+    {
+      "run": "test-1",
+      "result": "Inherited full wrapper 228/0 in both layouts; new file-wait test harness failed because proto.write_message returns a tuple, not dict; fixed test-only fixture, no candidate runtime change"
+    },
+    {
+      "run": "test-2",
+      "result": "14 script invocations rc=0; P14 skip in each layout"
+    }
+  ]
+}

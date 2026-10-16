@@ -1,0 +1,26 @@
+{
+  "taskId": "rd6-p-cont-191456",
+  "previous_candidate": "eb213ea103416c82bcbe57003047aa608dbf7443",
+  "previous_agentd_pin": "9625bdc15f853e49a6312d20dc429e23330e3d89",
+  "previous_status": "BLOCKED: missing wait_state; historical dependencies.json and test-results.json are unchanged",
+  "source_frozen": "1f650e88357b29908526245f6b7ccae2d5540464",
+  "agentd": {
+    "repository": "agentd.git",
+    "revision": "ca35c53c6bd9c437615058126c5bcd2f97de2801",
+    "selection": "Explicit nonempty AGENTD_DIR takes priority, otherwise real-source sibling agentd; no unified-repository fallback",
+    "interfaces": {
+      "proto": ["task_sock_path", "task_ready_path", "proc_starttime", "pid_identity_ok", "read_json", "atomic_write", "atomic_write_json", "now_ts"],
+      "task_state": ["report_nonempty"],
+      "wait_state": ["CurrentWaits", "CurrentWaits.sent", "CurrentWaits.event", "CurrentWaits.dialogs", "DIALOG_METHODS"],
+      "envscrub": ["scrub_env", "ENV_SCRUB_EXACT"],
+      "safe_delete": ["safe_rmtree"]
+    },
+    "approval_scope": "Separately reviewed agentd source pin only; wrapper lifecycle is tested independently, not inferred from imports"
+  },
+  "caller_inputs": {
+    "purpose": "Two read-only static cross-file checks in the inherited test_wrap.py (T43/T45); never execute these caller files",
+    "files": ["tasks/run.py", "pi-core/agent/extensions/agentd/core.ts"],
+    "revision_used": "cf97b1145e50967aac6d2f5a5b58e0bcc6d8157d",
+    "selection": "Explicit --caller-inputs synthetic root; no production workspace fallback"
+  }
+}

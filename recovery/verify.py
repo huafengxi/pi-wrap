@@ -75,7 +75,9 @@ for r in mapping["commits"]:
     else:
         assert r["target_commit"] is None
 assert parent == mapping["projection_tip"]
-final = tree(T, "HEAD")
+# Historical net-paths describes the immutable old BLOCKED candidate.
+accepted = "eb213ea103416c82bcbe57003047aa608dbf7443"
+final = tree(T, accepted)
 assert sorted(final.keys() | expected.keys()) == sorted(row["path"] for row in net["paths"])
 for row in net["paths"]:
     path = row["path"]
@@ -100,7 +102,28 @@ for r in refs["refs"]:
 for oid in sorted(closure):
     subprocess.run(["git", "-C", str(T), "cat-file", "-e", oid], check=True)
 subprocess.run(["git", "-C", str(T), "fsck", "--full", "--strict"], check=True)
-print(json.dumps({"status": "provenance PASS (runtime remains BLOCKED)", "source_frozen": mapping["source_frozen"],
-                  "target_head": g(T, "rev-parse", "HEAD"), "source_steps": len(source_steps), "projected": projected,
-                  "no_op": len(source_steps) - projected, "non_recovery_paths": len(final),
-                  "original_ref_mappings": len(refs["refs"]), "original_closure_objects": len(closure)}, indent=2))
+continuation = json.loads((REPO / 'recovery/continuation-net-paths.json').read_text())
+dependency = json.loads((REPO / 'recovery/continuation-dependencies.json').read_text())
+assert continuation['previous_candidate'] == dependency['previous_candidate'] == accepted
+assert dependency['source_frozen'] == mapping['source_frozen']
+assert dependency['agentd']['revision'] == 'ca35c53c6bd9c437615058126c5bcd2f97de2801'
+subprocess.run(['git', '-C', str(T), 'merge-base', '--is-ancestor', accepted, 'HEAD'], check=True)
+current = tree(T, 'HEAD')
+assert sorted(current.keys() | final.keys()) == [r['path'] for r in continuation['paths']]
+changed = []
+for row in continuation['paths']:
+    path = row['path']
+    assert row['previous'] == final.get(path), path
+    assert row['delivered'] == current.get(path), path
+    if row['previous'] != row['delivered']:
+        assert row['reason'], path
+        changed.append(path)
+assert changed == ['README.md', 'test_dependency.py', 'test_layout_integration.py'], changed
+for path in continuation['immutable_historical_metadata']:
+    assert g(T, 'rev-parse', accepted + ':' + path) == g(T, 'rev-parse', 'HEAD:' + path), path
+print(json.dumps({'status': 'historical + continuation provenance PASS (behavior tested separately)',
+                  'source_frozen': mapping['source_frozen'], 'target_head': g(T, 'rev-parse', 'HEAD'),
+                  'source_steps': len(source_steps), 'projected': projected, 'no_op': len(source_steps)-projected,
+                  'historical_non_recovery_paths': len(final), 'current_non_recovery_paths': len(current),
+                  'continuation_changed_paths': changed, 'accepted_ancestor': accepted,
+                  'original_ref_mappings': len(refs['refs']), 'original_closure_objects': len(closure)}, indent=2))

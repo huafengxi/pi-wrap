@@ -1,0 +1,360 @@
+{
+  "taskId": "rd6-p-cont-191456",
+  "previous_candidate": "eb213ea103416c82bcbe57003047aa608dbf7443",
+  "immutable_historical_metadata": [
+    "recovery/source-refs.json",
+    "recovery/source-map.json",
+    "recovery/net-paths.json",
+    "recovery/adaptations.json",
+    "recovery/ADAPTATIONS.md",
+    "recovery/dependencies.json",
+    "recovery/test-results.json"
+  ],
+  "paths": [
+    {
+      "path": ".gitignore",
+      "previous": {
+        "mode": "100644",
+        "oid": "4c5200c0490507bc2ead118f8cadd8af68de9a74"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "4c5200c0490507bc2ead118f8cadd8af68de9a74"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "README.md",
+      "previous": {
+        "mode": "100644",
+        "oid": "656f72c47d18038e80c249af9ffcdd200760af1f"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "da395dd901ec408ef8dc93cc5332559efa7af7e3"
+      },
+      "reason": "Current pin, explicit static test inputs and behavioral coverage; historical BLOCKED candidate remains named."
+    },
+    {
+      "path": "agentd_dependency.py",
+      "previous": {
+        "mode": "100644",
+        "oid": "843c6a351e81ea9ea5ad338af52d6fa88b3f769f"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "843c6a351e81ea9ea5ad338af52d6fa88b3f769f"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "fakepi_rpc.py",
+      "previous": {
+        "mode": "100755",
+        "oid": "a8dc21723f7192ce963ead1a24ec03a5ff680ea9"
+      },
+      "delivered": {
+        "mode": "100755",
+        "oid": "a8dc21723f7192ce963ead1a24ec03a5ff680ea9"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "fixture_support.py",
+      "previous": {
+        "mode": "100644",
+        "oid": "cb9b2ad582e927564ce4bde9aa5bcc56076015f1"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "cb9b2ad582e927564ce4bde9aa5bcc56076015f1"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "persona.py",
+      "previous": {
+        "mode": "100644",
+        "oid": "ffdef2c2e9290787734a46c167934ff6e2735a7b"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "ffdef2c2e9290787734a46c167934ff6e2735a7b"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "pi-rpc-wrap.py",
+      "previous": {
+        "mode": "100644",
+        "oid": "87ea3d7ee1b3a122f6cd73ac65ae770f49e08c55"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "87ea3d7ee1b3a122f6cd73ac65ae770f49e08c55"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "platform_paths.py",
+      "previous": {
+        "mode": "100644",
+        "oid": "339caf789b0fab083187a36b8f3a3d1c5898d37a"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "339caf789b0fab083187a36b8f3a3d1c5898d37a"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/README.md",
+      "previous": {
+        "mode": "100644",
+        "oid": "555401511be4d22eeb1f82adfbdd17e1cdabc813"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "555401511be4d22eeb1f82adfbdd17e1cdabc813"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-call/cap.yml",
+      "previous": {
+        "mode": "100644",
+        "oid": "e74d98543432beb8aeac40d23bb3831367065905"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "e74d98543432beb8aeac40d23bb3831367065905"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-call/prompt.md",
+      "previous": {
+        "mode": "100644",
+        "oid": "9f7a415185e8e4a2d9a35c0712ae957b9ccc62c3"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "9f7a415185e8e4a2d9a35c0712ae957b9ccc62c3"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-wl/cap.yml",
+      "previous": {
+        "mode": "100644",
+        "oid": "bca23fe14887c09e1f4e1b84e3dac0abfd702b54"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "bca23fe14887c09e1f4e1b84e3dac0abfd702b54"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-wl/prompt.md",
+      "previous": {
+        "mode": "100644",
+        "oid": "47f5e8dc73c6ef7a6f131251442f0e80199bdaf1"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "47f5e8dc73c6ef7a6f131251442f0e80199bdaf1"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-xt/cap.yml",
+      "previous": {
+        "mode": "100644",
+        "oid": "d279ad652d58b617c271f28e666565ac66bff1df"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "d279ad652d58b617c271f28e666565ac66bff1df"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-xt/prompt.md",
+      "previous": {
+        "mode": "100644",
+        "oid": "218ecae6a2d457476ba361e25e07a4e32529c310"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "218ecae6a2d457476ba361e25e07a4e32529c310"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/profiles/harness-call.json",
+      "previous": {
+        "mode": "100644",
+        "oid": "f1869acca748e40f93cdaa95d96df0a5ab1429cd"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "f1869acca748e40f93cdaa95d96df0a5ab1429cd"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/profiles/harness-min.json",
+      "previous": {
+        "mode": "100644",
+        "oid": "d3d2374d4e39a79be16b88a897ee8a5b8d9e0e69"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "d3d2374d4e39a79be16b88a897ee8a5b8d9e0e69"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/profiles/harness-wl.json",
+      "previous": {
+        "mode": "100644",
+        "oid": "0d06b0ef6d1ee27655a88fe4ee3e728e0e737f61"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "0d06b0ef6d1ee27655a88fe4ee3e728e0e737f61"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/clean.sh",
+      "previous": {
+        "mode": "100755",
+        "oid": "3e333cbe103d7c775bbb38935dc8c8a6ba2f9f12"
+      },
+      "delivered": {
+        "mode": "100755",
+        "oid": "3e333cbe103d7c775bbb38935dc8c8a6ba2f9f12"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/drive.py",
+      "previous": {
+        "mode": "100755",
+        "oid": "b36b2616501d2b0d5a5ff2626d7e51a2847161f9"
+      },
+      "delivered": {
+        "mode": "100755",
+        "oid": "b36b2616501d2b0d5a5ff2626d7e51a2847161f9"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/probe/toolface-probe.ts",
+      "previous": {
+        "mode": "100644",
+        "oid": "39071a84ee6e867b8873189fb6bedd34932d0993"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "39071a84ee6e867b8873189fb6bedd34932d0993"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test/toolface-harness/setup.sh",
+      "previous": {
+        "mode": "100755",
+        "oid": "bc1c9dc6336dfbc1debb52d473a10984964f1ddc"
+      },
+      "delivered": {
+        "mode": "100755",
+        "oid": "bc1c9dc6336dfbc1debb52d473a10984964f1ddc"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test_dependency.py",
+      "previous": {
+        "mode": "100644",
+        "oid": "5b8409ecc894602e466baa3e138298c31a14e490"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "23368bfc25175c694525da9b2e2f2306a06537cb"
+      },
+      "reason": "Only fixed pin/interface assumptions change: assert new real module/object identity rather than old missing-wait_state startup failure; keep negative dependency/report predicates."
+    },
+    {
+      "path": "test_fakepi.py",
+      "previous": {
+        "mode": "100644",
+        "oid": "2bcc9d2fddc4c94e1610621d6f68a319348daa91"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "2bcc9d2fddc4c94e1610621d6f68a319348daa91"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test_layout_integration.py",
+      "previous": null,
+      "delivered": {
+        "mode": "100644",
+        "oid": "03a76a0817d89877ec6fbe523a8372337c720a4f"
+      },
+      "reason": "New dependency-continuation tests, actual candidate wrapper/fakepi startup, task-tab file wait/reply, dialog/observer replay. No runtime implementation change."
+    },
+    {
+      "path": "test_persona.py",
+      "previous": {
+        "mode": "100644",
+        "oid": "b6aefde8acd553f014ee2689df155d6dc88c5c08"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "b6aefde8acd553f014ee2689df155d6dc88c5c08"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test_platform_paths.py",
+      "previous": {
+        "mode": "100644",
+        "oid": "c1439b267b2c45271bb4d3d36a05cc6f951fec72"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "c1439b267b2c45271bb4d3d36a05cc6f951fec72"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test_thinking.py",
+      "previous": {
+        "mode": "100644",
+        "oid": "6394626372ba032818fef53aef82e14d34d689ac"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "6394626372ba032818fef53aef82e14d34d689ac"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    },
+    {
+      "path": "test_wrap.py",
+      "previous": {
+        "mode": "100644",
+        "oid": "d21e9ac07a14217a043d3a3290c6e04cfd6ede89"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "d21e9ac07a14217a043d3a3290c6e04cfd6ede89"
+      },
+      "reason": "Unchanged content and mode from previous candidate."
+    }
+  ]
+}
