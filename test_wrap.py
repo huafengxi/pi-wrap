@@ -1524,6 +1524,32 @@ def t49_stderr_pump_live():
         e.cleanup([p])
 
 
+def t50_workspace_env():
+    """The spawned pi/probe must use AGENT_ROOT, not a missing/stale web env."""
+    for form in ("task", "resident"):
+        for inherited in (None, "/wrong/inherited/workspace"):
+            extra = {} if inherited is None else {"W_WORKSPACE": inherited}
+            if form == "resident":
+                extra.update(AGENTD_RESIDENT="1", AGENTD_SESSION_NAME="bot/t50")
+            e = Env("t50-" + form, fake_mode="hang_settle", extra_env=extra)
+            p = e.start_wrap()
+            try:
+                ok("T50 %s inherited=%r pi started" % (form, inherited), e.wait_argv())
+                # argv is written before the env snapshot; wait for the latter.
+                deadline = time.time() + 5
+                pe = None
+                while time.time() < deadline:
+                    pe = e.read_persona_env()
+                    if pe is not None:
+                        break
+                    time.sleep(0.05)
+                ok("T50 %s inherited=%r W_WORKSPACE=AGENT_ROOT" % (form, inherited),
+                   pe is not None and pe.get("W_WORKSPACE") == e.root
+                   and pe.get("AGENT_ROOT") == e.root, repr(pe))
+            finally:
+                e.cleanup([p])
+
+
 def main():
     global PASS, FAIL
     os.chmod(FAKEPI, 0o755)
@@ -1555,7 +1581,8 @@ def main():
                t45_spawn_command_contract,
                t46_resident_prompt_delivery,
                t48_persona_emission,
-               t49_stderr_pump_live):
+               t49_stderr_pump_live,
+               t50_workspace_env):
         print("---- %s" % fn.__name__)
         try:
             fn()

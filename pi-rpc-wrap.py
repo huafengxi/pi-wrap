@@ -418,7 +418,10 @@ class Wrap:
     def spawn_pi(self):
         self.clear_ready_marks()       # 陈旧标记不得骗开本代就绪门（先于 pi 启动）
         argv = self.build_argv()
-        env = dict(os.environ, SESSIOND_SESSION_FILE=self.session_file)
+        # The sessiond probe uses the caller workspace for its sidecar files.
+        # Derive it from this wrapper's root, not the runner's inherited env.
+        env = dict(os.environ, SESSIOND_SESSION_FILE=self.session_file,
+                   W_WORKSPACE=self.root)
         # 压缩策略与工具输出截断策略的写者都是人格注入层（它在会话内按 profile 的
         # `contextCompaction` / `toolOutputCap` 设这两枚 env 并装载执行体）⇒ 本层恒洗掉可能从宿主
         # 继承的陈旧值：「无策略 = env 不在场」是硬语义，不靠调用方环境干净
