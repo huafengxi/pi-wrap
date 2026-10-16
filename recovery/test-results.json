@@ -1,0 +1,49 @@
+{
+  "taskId": "rd6-p-175748",
+  "status": "BLOCKED",
+  "agentd_revision": "9625bdc15f853e49a6312d20dc429e23330e3d89",
+  "bash32": "GNU bash, version 3.2.0(2)-release (x86_64-unknown-linux-gnu)",
+  "tests": [
+    {
+      "test": "test_dependency.py",
+      "returncode": 0
+    },
+    {
+      "test": "test_fakepi.py",
+      "returncode": 0
+    },
+    {
+      "test": "test_persona.py",
+      "returncode": 0
+    },
+    {
+      "test": "test_platform_paths.py",
+      "returncode": 0
+    },
+    {
+      "test": "test_thinking.py",
+      "returncode": 0
+    },
+    {
+      "test": "test_wrap.py",
+      "returncode": 1
+    }
+  ],
+  "details": {
+    "test_dependency.py": "2 tests OK; proto/task_state/report_nonempty/envscrub across sibling and explicit non-sibling; real/symlink/space and missing dependencies; full wrap startup rejects absent wait_state as expected negative",
+    "test_fakepi.py": "2 tests OK; no real pi/model",
+    "test_persona.py": "86 reported passed, 0 failed across 16 groups; one pre-existing P14 optional real kb_index integration skip (not a tested behavior)",
+    "test_platform_paths.py": "4 tests OK; 30 root shell scenarios, 120 actual Bash3.2 executions; full setup on synthetic roots and clean root prefix only; Bash3.2 -n on both full scripts",
+    "test_thinking.py": "4 tests OK",
+    "test_wrap.py": "BLOCKED at required wait_state.py import preflight; no lifecycle cases executed"
+  },
+  "initial_harness_issue": "First run fixture cleanup refused private /tmp base because TMPDIR differed; exact newly created private base allowlisted, full suite rerun. No production authority added.",
+  "not_claimed": [
+    "wrapper lifecycle/resident/message/task-tab replay integration",
+    "optional caller kb-index integration",
+    "real models or real pi",
+    "macOS or multi-machine runtime",
+    "production deployment",
+    "P1/P6 completion"
+  ]
+}

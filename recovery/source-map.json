@@ -1,0 +1,385 @@
+{
+  "taskId": "rd6-p-175748",
+  "source_repo": "agent-platform.git",
+  "source_baseline": "990253da3b5c5ec83fd43a2a463f39ed6d42aadf",
+  "source_frozen": "1f650e88357b29908526245f6b7ccae2d5540464",
+  "original_main": "a9daed46516c1c7ff19bbe60746f89cd77ee9215",
+  "projection_tip": "849a6fa40be400e2dd28be4dfd32a60b992285b1",
+  "commits": [
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "9809211b1e91adabb0dfda570bd4a79dc4313d21",
+      "source_parent": "990253da3b5c5ec83fd43a2a463f39ed6d42aadf",
+      "target_parent": "a9daed46516c1c7ff19bbe60746f89cd77ee9215",
+      "changes": [
+        {
+          "source_path": "pi-wrap/README.md",
+          "target_path": "README.md",
+          "before": {
+            "source": "pi-wrap/README.md",
+            "mode": "100644",
+            "oid": "a7d6958f7ef7d8c775ba1cff5dd4e160ef6a2179"
+          },
+          "after": {
+            "source": "pi-wrap/README.md",
+            "mode": "100644",
+            "oid": "1fbc2a20c32f70c6ea13d83a3f2dfb61dbb76f3e"
+          },
+          "deleted": false
+        },
+        {
+          "source_path": "platform_paths.py",
+          "target_path": "platform_paths.py",
+          "before": null,
+          "after": {
+            "source": "platform_paths.py",
+            "mode": "100644",
+            "oid": "1bda46c0d34cedfbd81cb9312536ffbee36eeeb7"
+          },
+          "deleted": false
+        },
+        {
+          "source_path": "pi-wrap/test_persona.py",
+          "target_path": "test_persona.py",
+          "before": {
+            "source": "pi-wrap/test_persona.py",
+            "mode": "100644",
+            "oid": "e3a304106abcc24caeb1d574769258de016ce756"
+          },
+          "after": {
+            "source": "pi-wrap/test_persona.py",
+            "mode": "100644",
+            "oid": "5523233f253939dae151c9675cfc65777844020e"
+          },
+          "deleted": false
+        },
+        {
+          "source_path": "test_platform_paths.py",
+          "target_path": "test_platform_paths.py",
+          "before": null,
+          "after": {
+            "source": "test_platform_paths.py",
+            "mode": "100644",
+            "oid": "6943ef066afd9b356724dc96a3919ec4a274c3bc"
+          },
+          "deleted": false
+        },
+        {
+          "source_path": "pi-wrap/test_wrap.py",
+          "target_path": "test_wrap.py",
+          "before": {
+            "source": "pi-wrap/test_wrap.py",
+            "mode": "100644",
+            "oid": "bc99c57fdeff561a23bbf5cf4039764ca52d358c"
+          },
+          "after": {
+            "source": "pi-wrap/test_wrap.py",
+            "mode": "100644",
+            "oid": "3ceccbdf17f037349623eeaec18bf08bf0718086"
+          },
+          "deleted": false
+        }
+      ],
+      "taskId": "rd6-p-175748",
+      "target_commit": "cb023a8e0036ea08b5b1afdb7ad52355200a09d3",
+      "disposition": "projected"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "4dd1b8eaa958ef5f236afed78a74be30e43d030b",
+      "source_parent": "9809211b1e91adabb0dfda570bd4a79dc4313d21",
+      "target_parent": "cb023a8e0036ea08b5b1afdb7ad52355200a09d3",
+      "changes": [
+        {
+          "source_path": "platform_paths.py",
+          "target_path": "platform_paths.py",
+          "before": {
+            "source": "platform_paths.py",
+            "mode": "100644",
+            "oid": "1bda46c0d34cedfbd81cb9312536ffbee36eeeb7"
+          },
+          "after": {
+            "source": "platform_paths.py",
+            "mode": "100644",
+            "oid": "fac7d40d7846eaf80865215c413071d3a7627d1a"
+          },
+          "deleted": false
+        },
+        {
+          "source_path": "test_platform_paths.py",
+          "target_path": "test_platform_paths.py",
+          "before": {
+            "source": "test_platform_paths.py",
+            "mode": "100644",
+            "oid": "6943ef066afd9b356724dc96a3919ec4a274c3bc"
+          },
+          "after": {
+            "source": "test_platform_paths.py",
+            "mode": "100644",
+            "oid": "42f1e3419ba1007398cd431ecc19d313e2bb53a5"
+          },
+          "deleted": false
+        }
+      ],
+      "taskId": "rd6-p-175748",
+      "target_commit": "a88ffd202d8ffbb6cf5b5b2d2a82104c4efd09d6",
+      "disposition": "projected"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "b5de241e352968bd317176e221050f6950089947",
+      "source_parent": "4dd1b8eaa958ef5f236afed78a74be30e43d030b",
+      "target_parent": "a88ffd202d8ffbb6cf5b5b2d2a82104c4efd09d6",
+      "changes": [
+        {
+          "source_path": "pi-wrap/pi-rpc-wrap.py",
+          "target_path": "pi-rpc-wrap.py",
+          "before": {
+            "source": "pi-wrap/pi-rpc-wrap.py",
+            "mode": "100644",
+            "oid": "500e514bd2d9b2ba4d877ed2cd1194b0b8126a84"
+          },
+          "after": {
+            "source": "pi-wrap/pi-rpc-wrap.py",
+            "mode": "100644",
+            "oid": "0464b9c6318163920149f55f260f8dd0fd47256d"
+          },
+          "deleted": false
+        }
+      ],
+      "taskId": "rd6-p-175748",
+      "target_commit": "eed7531b66247f59cb739324e7fef2d009188ffa",
+      "disposition": "projected"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "c4a35640c77a9356ce61addd6a1cde918706bff3",
+      "source_parent": "b5de241e352968bd317176e221050f6950089947",
+      "target_parent": "eed7531b66247f59cb739324e7fef2d009188ffa",
+      "changes": [],
+      "taskId": "rd6-p-175748",
+      "target_commit": null,
+      "disposition": "no-op (no owned path delta)"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "84184041bef2e74d05164c2fc321f4b44a1717e5",
+      "source_parent": "c4a35640c77a9356ce61addd6a1cde918706bff3",
+      "target_parent": "eed7531b66247f59cb739324e7fef2d009188ffa",
+      "changes": [],
+      "taskId": "rd6-p-175748",
+      "target_commit": null,
+      "disposition": "no-op (no owned path delta)"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "00a44146804f35a5f005d574d76b772dee159cef",
+      "source_parent": "84184041bef2e74d05164c2fc321f4b44a1717e5",
+      "target_parent": "eed7531b66247f59cb739324e7fef2d009188ffa",
+      "changes": [],
+      "taskId": "rd6-p-175748",
+      "target_commit": null,
+      "disposition": "no-op (no owned path delta)"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "e582727a0d02b78d08914aed89fd7479e0159a19",
+      "source_parent": "00a44146804f35a5f005d574d76b772dee159cef",
+      "target_parent": "eed7531b66247f59cb739324e7fef2d009188ffa",
+      "changes": [
+        {
+          "source_path": "pi-wrap/README.md",
+          "target_path": "README.md",
+          "before": {
+            "source": "pi-wrap/README.md",
+            "mode": "100644",
+            "oid": "1fbc2a20c32f70c6ea13d83a3f2dfb61dbb76f3e"
+          },
+          "after": {
+            "source": "pi-wrap/README.md",
+            "mode": "100644",
+            "oid": "2e28d7a816a445846d909f3778ce635d0d5d6ac9"
+          },
+          "deleted": false
+        }
+      ],
+      "taskId": "rd6-p-175748",
+      "target_commit": "b1ea08cdfd18f10e163730f434b7150aa475e618",
+      "disposition": "projected"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "ba1e707af9163b4b7ae0b554c0525d3fe5210c72",
+      "source_parent": "e582727a0d02b78d08914aed89fd7479e0159a19",
+      "target_parent": "b1ea08cdfd18f10e163730f434b7150aa475e618",
+      "changes": [],
+      "taskId": "rd6-p-175748",
+      "target_commit": null,
+      "disposition": "no-op (no owned path delta)"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "68b595f33ab50108418c9a969378e7a471c200dc",
+      "source_parent": "ba1e707af9163b4b7ae0b554c0525d3fe5210c72",
+      "target_parent": "b1ea08cdfd18f10e163730f434b7150aa475e618",
+      "changes": [
+        {
+          "source_path": "pi-wrap/fakepi_rpc.py",
+          "target_path": "fakepi_rpc.py",
+          "before": {
+            "source": "pi-wrap/fakepi_rpc.py",
+            "mode": "100755",
+            "oid": "a19406629ef6c4b24af28e0baa533a15590630ef"
+          },
+          "after": {
+            "source": "pi-wrap/fakepi_rpc.py",
+            "mode": "100755",
+            "oid": "a8dc21723f7192ce963ead1a24ec03a5ff680ea9"
+          },
+          "deleted": false
+        },
+        {
+          "source_path": "pi-wrap/pi-rpc-wrap.py",
+          "target_path": "pi-rpc-wrap.py",
+          "before": {
+            "source": "pi-wrap/pi-rpc-wrap.py",
+            "mode": "100644",
+            "oid": "0464b9c6318163920149f55f260f8dd0fd47256d"
+          },
+          "after": {
+            "source": "pi-wrap/pi-rpc-wrap.py",
+            "mode": "100644",
+            "oid": "f34a227e1f30d9469cb5b963aa3ac1711bc671ee"
+          },
+          "deleted": false
+        },
+        {
+          "source_path": "pi-wrap/test_wrap.py",
+          "target_path": "test_wrap.py",
+          "before": {
+            "source": "pi-wrap/test_wrap.py",
+            "mode": "100644",
+            "oid": "3ceccbdf17f037349623eeaec18bf08bf0718086"
+          },
+          "after": {
+            "source": "pi-wrap/test_wrap.py",
+            "mode": "100644",
+            "oid": "2e65e596fb8bcc4abfb91a23f60e946a74fd26f5"
+          },
+          "deleted": false
+        }
+      ],
+      "taskId": "rd6-p-175748",
+      "target_commit": "41bc9b3b089ee984e49eebb0aac734dd889f0a70",
+      "disposition": "projected"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "da1961bd02aca8cbf0aa72a922ef0773e757c470",
+      "source_parent": "68b595f33ab50108418c9a969378e7a471c200dc",
+      "target_parent": "41bc9b3b089ee984e49eebb0aac734dd889f0a70",
+      "changes": [],
+      "taskId": "rd6-p-175748",
+      "target_commit": null,
+      "disposition": "no-op (no owned path delta)"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "f93b8eb4945bf8bf52ab0773da6623978676acd3",
+      "source_parent": "da1961bd02aca8cbf0aa72a922ef0773e757c470",
+      "target_parent": "41bc9b3b089ee984e49eebb0aac734dd889f0a70",
+      "changes": [],
+      "taskId": "rd6-p-175748",
+      "target_commit": null,
+      "disposition": "no-op (no owned path delta)"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "fb758234da0bd717d511dd41999679fa0bbf4427",
+      "source_parent": "f93b8eb4945bf8bf52ab0773da6623978676acd3",
+      "target_parent": "41bc9b3b089ee984e49eebb0aac734dd889f0a70",
+      "changes": [],
+      "taskId": "rd6-p-175748",
+      "target_commit": null,
+      "disposition": "no-op (no owned path delta)"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "4ac4631fbdbf27f3c400805b233dc1d7a9892d46",
+      "source_parent": "fb758234da0bd717d511dd41999679fa0bbf4427",
+      "target_parent": "41bc9b3b089ee984e49eebb0aac734dd889f0a70",
+      "changes": [
+        {
+          "source_path": "pi-wrap/persona.py",
+          "target_path": "persona.py",
+          "before": {
+            "source": "pi-wrap/persona.py",
+            "mode": "100644",
+            "oid": "705bbef34a64d373a49c91de24c274403c527f32"
+          },
+          "after": {
+            "source": "pi-wrap/persona.py",
+            "mode": "100644",
+            "oid": "ffdef2c2e9290787734a46c167934ff6e2735a7b"
+          },
+          "deleted": false
+        },
+        {
+          "source_path": "pi-wrap/test_persona.py",
+          "target_path": "test_persona.py",
+          "before": {
+            "source": "pi-wrap/test_persona.py",
+            "mode": "100644",
+            "oid": "5523233f253939dae151c9675cfc65777844020e"
+          },
+          "after": {
+            "source": "pi-wrap/test_persona.py",
+            "mode": "100644",
+            "oid": "1485174a204a8b6d948d43e9ef6b03f924e1253f"
+          },
+          "deleted": false
+        },
+        {
+          "source_path": "pi-wrap/test_thinking.py",
+          "target_path": "test_thinking.py",
+          "before": null,
+          "after": {
+            "source": "pi-wrap/test_thinking.py",
+            "mode": "100644",
+            "oid": "0e4cf0a2237d8e3496b5e764f7252c9266aee0de"
+          },
+          "deleted": false
+        }
+      ],
+      "taskId": "rd6-p-175748",
+      "target_commit": "296bcfb46a3f804bc1abd6f6a3f8ad98e6ad2a21",
+      "disposition": "projected"
+    },
+    {
+      "source_repo": "agent-platform.git",
+      "source_commit": "1f650e88357b29908526245f6b7ccae2d5540464",
+      "source_parent": "4ac4631fbdbf27f3c400805b233dc1d7a9892d46",
+      "target_parent": "296bcfb46a3f804bc1abd6f6a3f8ad98e6ad2a21",
+      "changes": [
+        {
+          "source_path": "pi-wrap/pi-rpc-wrap.py",
+          "target_path": "pi-rpc-wrap.py",
+          "before": {
+            "source": "pi-wrap/pi-rpc-wrap.py",
+            "mode": "100644",
+            "oid": "f34a227e1f30d9469cb5b963aa3ac1711bc671ee"
+          },
+          "after": {
+            "source": "pi-wrap/pi-rpc-wrap.py",
+            "mode": "100644",
+            "oid": "3352209d825a61e77abc6bc62412f7eb8f92f4af"
+          },
+          "deleted": false
+        }
+      ],
+      "taskId": "rd6-p-175748",
+      "target_commit": "849a6fa40be400e2dd28be4dfd32a60b992285b1",
+      "disposition": "projected"
+    }
+  ]
+}

@@ -1,0 +1,449 @@
+{
+  "projection_tip": "849a6fa40be400e2dd28be4dfd32a60b992285b1",
+  "adaptation_commit": "b698911f60b1cbc378f63c9830d14c0d754c810b",
+  "paths": [
+    {
+      "path": ".gitignore",
+      "original": {
+        "mode": "100644",
+        "oid": "4c5200c0490507bc2ead118f8cadd8af68de9a74"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "4c5200c0490507bc2ead118f8cadd8af68de9a74"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "4c5200c0490507bc2ead118f8cadd8af68de9a74"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "README.md",
+      "original": {
+        "mode": "100644",
+        "oid": "a7d6958f7ef7d8c775ba1cff5dd4e160ef6a2179"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "2e28d7a816a445846d909f3778ce635d0d5d6ac9"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "656f72c47d18038e80c249af9ffcdd200760af1f"
+      },
+      "deleted": false,
+      "adaptation": "standalone dependency pin/interface and transparent BLOCKED test/production boundary"
+    },
+    {
+      "path": "agentd_dependency.py",
+      "original": null,
+      "projected": null,
+      "delivered": {
+        "mode": "100644",
+        "oid": "843c6a351e81ea9ea5ad338af52d6fa88b3f769f"
+      },
+      "deleted": false,
+      "adaptation": "explicit AGENTD_DIR priority, real source sibling only, clear missing interface rejection"
+    },
+    {
+      "path": "fakepi_rpc.py",
+      "original": {
+        "mode": "100755",
+        "oid": "a19406629ef6c4b24af28e0baa533a15590630ef"
+      },
+      "projected": {
+        "mode": "100755",
+        "oid": "a8dc21723f7192ce963ead1a24ec03a5ff680ea9"
+      },
+      "delivered": {
+        "mode": "100755",
+        "oid": "a8dc21723f7192ce963ead1a24ec03a5ff680ea9"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "fixture_support.py",
+      "original": null,
+      "projected": null,
+      "delivered": {
+        "mode": "100644",
+        "oid": "cb9b2ad582e927564ce4bde9aa5bcc56076015f1"
+      },
+      "deleted": false,
+      "adaptation": "private short fixture base and safe_delete-only cleanup authority"
+    },
+    {
+      "path": "persona.py",
+      "original": {
+        "mode": "100644",
+        "oid": "705bbef34a64d373a49c91de24c274403c527f32"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "ffdef2c2e9290787734a46c167934ff6e2735a7b"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "ffdef2c2e9290787734a46c167934ff6e2735a7b"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "pi-rpc-wrap.py",
+      "original": {
+        "mode": "100644",
+        "oid": "500e514bd2d9b2ba4d877ed2cd1194b0b8126a84"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "3352209d825a61e77abc6bc62412f7eb8f92f4af"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "87ea3d7ee1b3a122f6cd73ac65ae770f49e08c55"
+      },
+      "deleted": false,
+      "adaptation": "realpath source import; explicit/sibling dependency validation; deployment example removed; wait code preserved"
+    },
+    {
+      "path": "platform_paths.py",
+      "original": null,
+      "projected": {
+        "mode": "100644",
+        "oid": "fac7d40d7846eaf80865215c413071d3a7627d1a"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "339caf789b0fab083187a36b8f3a3d1c5898d37a"
+      },
+      "deleted": false,
+      "adaptation": "local root helper v1 without markers/MODULES"
+    },
+    {
+      "path": "test/toolface-harness/README.md",
+      "original": {
+        "mode": "100644",
+        "oid": "149cafec422cef00f2a73d6d30146a03e43e84db"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "149cafec422cef00f2a73d6d30146a03e43e84db"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "555401511be4d22eeb1f82adfbdd17e1cdabc813"
+      },
+      "deleted": false,
+      "adaptation": "document helper-root mechanism instead of deployment root default"
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-call/cap.yml",
+      "original": {
+        "mode": "100644",
+        "oid": "e74d98543432beb8aeac40d23bb3831367065905"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "e74d98543432beb8aeac40d23bb3831367065905"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "e74d98543432beb8aeac40d23bb3831367065905"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-call/prompt.md",
+      "original": {
+        "mode": "100644",
+        "oid": "9f7a415185e8e4a2d9a35c0712ae957b9ccc62c3"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "9f7a415185e8e4a2d9a35c0712ae957b9ccc62c3"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "9f7a415185e8e4a2d9a35c0712ae957b9ccc62c3"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-wl/cap.yml",
+      "original": {
+        "mode": "100644",
+        "oid": "bca23fe14887c09e1f4e1b84e3dac0abfd702b54"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "bca23fe14887c09e1f4e1b84e3dac0abfd702b54"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "bca23fe14887c09e1f4e1b84e3dac0abfd702b54"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-wl/prompt.md",
+      "original": {
+        "mode": "100644",
+        "oid": "47f5e8dc73c6ef7a6f131251442f0e80199bdaf1"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "47f5e8dc73c6ef7a6f131251442f0e80199bdaf1"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "47f5e8dc73c6ef7a6f131251442f0e80199bdaf1"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-xt/cap.yml",
+      "original": {
+        "mode": "100644",
+        "oid": "d279ad652d58b617c271f28e666565ac66bff1df"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "d279ad652d58b617c271f28e666565ac66bff1df"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "d279ad652d58b617c271f28e666565ac66bff1df"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/caps/harness-xt/prompt.md",
+      "original": {
+        "mode": "100644",
+        "oid": "218ecae6a2d457476ba361e25e07a4e32529c310"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "218ecae6a2d457476ba361e25e07a4e32529c310"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "218ecae6a2d457476ba361e25e07a4e32529c310"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/profiles/harness-call.json",
+      "original": {
+        "mode": "100644",
+        "oid": "f1869acca748e40f93cdaa95d96df0a5ab1429cd"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "f1869acca748e40f93cdaa95d96df0a5ab1429cd"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "f1869acca748e40f93cdaa95d96df0a5ab1429cd"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/profiles/harness-min.json",
+      "original": {
+        "mode": "100644",
+        "oid": "d3d2374d4e39a79be16b88a897ee8a5b8d9e0e69"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "d3d2374d4e39a79be16b88a897ee8a5b8d9e0e69"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "d3d2374d4e39a79be16b88a897ee8a5b8d9e0e69"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "test/toolface-harness/assets/bots/profiles/harness-wl.json",
+      "original": {
+        "mode": "100644",
+        "oid": "0d06b0ef6d1ee27655a88fe4ee3e728e0e737f61"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "0d06b0ef6d1ee27655a88fe4ee3e728e0e737f61"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "0d06b0ef6d1ee27655a88fe4ee3e728e0e737f61"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "test/toolface-harness/clean.sh",
+      "original": {
+        "mode": "100755",
+        "oid": "d1b3b6a757ac92ad34320d5ead089df3413e83ab"
+      },
+      "projected": {
+        "mode": "100755",
+        "oid": "d1b3b6a757ac92ad34320d5ead089df3413e83ab"
+      },
+      "delivered": {
+        "mode": "100755",
+        "oid": "3e333cbe103d7c775bbb38935dc8c8a6ba2f9f12"
+      },
+      "deleted": false,
+      "adaptation": "realpath shell entry and local helper CLI root; destructive body not executed"
+    },
+    {
+      "path": "test/toolface-harness/drive.py",
+      "original": {
+        "mode": "100755",
+        "oid": "72063eedcca9daddb3d8ac6d51a3534cbe88a29b"
+      },
+      "projected": {
+        "mode": "100755",
+        "oid": "72063eedcca9daddb3d8ac6d51a3534cbe88a29b"
+      },
+      "delivered": {
+        "mode": "100755",
+        "oid": "b36b2616501d2b0d5a5ff2626d7e51a2847161f9"
+      },
+      "deleted": false,
+      "adaptation": "real source path and helper root; real-model driver not executed"
+    },
+    {
+      "path": "test/toolface-harness/probe/toolface-probe.ts",
+      "original": {
+        "mode": "100644",
+        "oid": "39071a84ee6e867b8873189fb6bedd34932d0993"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "39071a84ee6e867b8873189fb6bedd34932d0993"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "39071a84ee6e867b8873189fb6bedd34932d0993"
+      },
+      "deleted": false,
+      "adaptation": null
+    },
+    {
+      "path": "test/toolface-harness/setup.sh",
+      "original": {
+        "mode": "100755",
+        "oid": "86ee92ad0f45f8f1c4e53abdff298144b2b35099"
+      },
+      "projected": {
+        "mode": "100755",
+        "oid": "86ee92ad0f45f8f1c4e53abdff298144b2b35099"
+      },
+      "delivered": {
+        "mode": "100755",
+        "oid": "bc1c9dc6336dfbc1debb52d473a10984964f1ddc"
+      },
+      "deleted": false,
+      "adaptation": "realpath shell entry and local helper CLI root (HARNESS_WS wins)"
+    },
+    {
+      "path": "test_dependency.py",
+      "original": null,
+      "projected": null,
+      "delivered": {
+        "mode": "100644",
+        "oid": "5b8409ecc894602e466baa3e138298c31a14e490"
+      },
+      "deleted": false,
+      "adaptation": "fixed pin imports/report/envscrub and missing dependency layout negatives"
+    },
+    {
+      "path": "test_fakepi.py",
+      "original": null,
+      "projected": null,
+      "delivered": {
+        "mode": "100644",
+        "oid": "2bcc9d2fddc4c94e1610621d6f68a319348daa91"
+      },
+      "deleted": false,
+      "adaptation": "direct fakepi-only protocol smoke tests"
+    },
+    {
+      "path": "test_persona.py",
+      "original": {
+        "mode": "100644",
+        "oid": "e3a304106abcc24caeb1d574769258de016ce756"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "1485174a204a8b6d948d43e9ef6b03f924e1253f"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "b6aefde8acd553f014ee2689df155d6dc88c5c08"
+      },
+      "deleted": false,
+      "adaptation": "local helper import and private safe fixture cleanup"
+    },
+    {
+      "path": "test_platform_paths.py",
+      "original": null,
+      "projected": {
+        "mode": "100644",
+        "oid": "42f1e3419ba1007398cd431ecc19d313e2bb53a5"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "c1439b267b2c45271bb4d3d36a05cc6f951fec72"
+      },
+      "deleted": false,
+      "adaptation": "standalone helper + real Linux Bash3.2 root and second shell entry contract"
+    },
+    {
+      "path": "test_thinking.py",
+      "original": null,
+      "projected": {
+        "mode": "100644",
+        "oid": "0e4cf0a2237d8e3496b5e764f7252c9266aee0de"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "6394626372ba032818fef53aef82e14d34d689ac"
+      },
+      "deleted": false,
+      "adaptation": "test dependency locator honors AGENTD_DIR"
+    },
+    {
+      "path": "test_wrap.py",
+      "original": {
+        "mode": "100644",
+        "oid": "bc99c57fdeff561a23bbf5cf4039764ca52d358c"
+      },
+      "projected": {
+        "mode": "100644",
+        "oid": "2e65e596fb8bcc4abfb91a23f60e946a74fd26f5"
+      },
+      "delivered": {
+        "mode": "100644",
+        "oid": "d21e9ac07a14217a043d3a3290c6e04cfd6ede89"
+      },
+      "deleted": false,
+      "adaptation": "local helper, dependency preflight, child AGENTD_DIR, private safe cleanup, synthetic profile model strings"
+    }
+  ]
+}

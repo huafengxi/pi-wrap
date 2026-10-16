@@ -1,0 +1,16 @@
+{
+  "agentd": {
+    "repository": "agentd.git",
+    "revision": "9625bdc15f853e49a6312d20dc429e23330e3d89",
+    "selection": "Nonempty AGENTD_DIR (expanduser, absolute realpath) takes priority; otherwise real-source sibling agentd. No unified-repository fallback.",
+    "interfaces": {
+      "proto": ["task_sock_path", "task_ready_path", "proc_starttime", "pid_identity_ok", "read_json", "atomic_write", "atomic_write_json", "now_ts"],
+      "task_state": ["report_nonempty"],
+      "wait_state": ["CurrentWaits(home, self_id)", "CurrentWaits.sent(request)", "CurrentWaits.event(event)", "CurrentWaits.dialogs()", "DIALOG_METHODS"]
+    },
+    "test_interfaces": {"safe_delete": ["safe_rmtree"], "envscrub": ["scrub_env", "ENV_SCRUB_EXACT"]},
+    "compatibility": "BLOCKED: wait_state.py is absent at this authorized pin. Full source task-tab tracking is preserved; startup refuses the missing dependency. No local wait-state copy or capability downgrade.",
+    "source_requiring_missing_interface": "1f650e88357b29908526245f6b7ccae2d5540464"
+  },
+  "taskId": "rd6-p-175748"
+}
