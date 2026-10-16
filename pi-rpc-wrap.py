@@ -2,7 +2,7 @@
 """pi-rpc-wrap.py — 任务会话封装脚本（plan v3 B 路线）。
 
 定位 = 「带脑子的 socat」：把任务会话以 `pi --mode rpc` 形态拉起，持有其
-stdio，并向 ~/m/run/agentd/<taskId>.sock 透传 pi rpc 原生字节流——观测/交互
+stdio，并向 <root>/run/agentd/<taskId>.sock 透传 pi rpc 原生字节流——观测/交互
 的全部智能（get_entries 基线/事件环/注入/自愈）由消费方（web sessiond
 SocketSupervisor）经透传链路驱动，本脚本不实现任何观测语义。
 
@@ -104,12 +104,11 @@ from collections import deque
 # shared with the TypeScript side (the agentd extension's core.ts) and
 # with every agentd module. AGENTD_DIR overrides the location for a layout where
 # the two repos are not siblings.
-_HERE = os.path.dirname(os.path.abspath(__file__))
-AGENTD_DIR = os.environ.get("AGENTD_DIR") or os.path.join(
-    os.path.dirname(_HERE), "agentd")
-for _p in (_HERE, AGENTD_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+_HERE = os.path.dirname(os.path.realpath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+from agentd_dependency import require_agentd
+AGENTD_DIR = require_agentd("proto", "task_state", "wait_state")
 import proto
 from wait_state import CurrentWaits, DIALOG_METHODS  # noqa: E402
 from task_state import report_nonempty

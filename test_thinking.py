@@ -10,7 +10,8 @@ import tempfile
 import unittest
 
 import persona
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agentd"))
+from agentd_dependency import require_agentd
+require_agentd("safe_delete")
 from safe_delete import safe_rmtree
 
 

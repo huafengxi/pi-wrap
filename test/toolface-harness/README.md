@@ -29,7 +29,7 @@ harness 的读端到达即写（`read1` 语义）⇒ 顺带核验会话存活期
 仓里不存机器专有值：无用户名 / 主机名 / 家目录绝对路径 / 仓名单常量。部署面一律
 「现场发现 ∨ 调用方注入」：`pi` 的可执行路径运行时 `command -v pi` 取；wrap 档追加探针用的
 shim 运行时生成、不落仓；生产根清单缺省 = 现场发现（工作区根 + 其下每个含 `.git` 的一级子目录），
-也可 `HARNESS_PROD_ROOTS` 注入。工作区根缺省值 `~/m` 是可覆盖的约定值（`HARNESS_WS`），
+也可 `HARNESS_PROD_ROOTS` 注入。工作区根优先取 `HARNESS_WS`，否则使用同仓 helper（非空 `PLATFORM_WORKSPACE`，再默认真实源码仓父目录），
 不是硬依赖。
 
 ## 布局
@@ -48,7 +48,7 @@ shim 运行时生成、不落仓；生产根清单缺省 = 现场发现（工作
 | 变量 | 缺省 | 含义 |
 |---|---|---|
 | `HARNESS_ROOT` | 无（`drive.py`/`clean.sh` 必需） | 工作根；必须在临时基目录内 |
-| `HARNESS_WS` | `~/m` | 工作区根：软链源、注入层位置与生产根发现的基准 |
+| `HARNESS_WS` | 本仓 helper 的 workspace 契约 | 工作区根：软链源、注入层位置与生产根发现的基准 |
 | `HARNESS_BASE` | `<HARNESS_WS>/run/temp/toolface-harness` | 临时基目录（工作根的允许范围） |
 | `HARNESS_PROD_ROOTS` | 现场发现 | 冒号分隔的生产根清单（断言用） |
 | `HARNESS_WRAP` | 本 harness 所在 checkout 的 `pi-rpc-wrap.py` | `wrap` 档的被测脚本 |

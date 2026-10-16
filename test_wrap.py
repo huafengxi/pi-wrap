@@ -21,10 +21,12 @@ import tempfile
 import threading
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from platform_paths import workspace_root
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+from fixture_support import fixture_dir, cleanup_tree
+
+HERE = os.path.dirname(os.path.realpath(__file__))
 WRAP = os.path.join(HERE, "pi-rpc-wrap.py")
 FAKEPI = os.path.join(HERE, "fakepi_rpc.py")
 
@@ -49,11 +51,8 @@ def _wrap_ext_dir_rel():
 EXT_DIR_REL = _wrap_ext_dir_rel()
 EXT_DIR_PARTS = tuple(EXT_DIR_REL.split("/"))
 # proto.py 住在兄弟仓 agentd/（协议单点，与 TS 侧 core.ts 同源）；AGENTD_DIR 可改指
-AGENTD_DIR = os.environ.get("AGENTD_DIR") or os.path.join(
-    os.path.dirname(HERE), "agentd")
-for _p in (HERE, AGENTD_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+from agentd_dependency import require_agentd
+AGENTD_DIR = require_agentd("proto", "task_state", "wait_state", "envscrub")
 import proto  # noqa: E402  就绪标记路径单点
 
 PASS = 0
@@ -153,7 +152,7 @@ class Env:
     def __init__(self, name, fake_mode="ok", extra_env=None, preseed_user=False,
                  with_prompt=True):
         # Keep socket fixtures below Unix sun_path limits, including on macOS.
-        self.root = tempfile.mkdtemp(prefix="wraptest-%s-" % name, dir="/tmp")
+        self.root = fixture_dir(prefix="wraptest-%s-" % name)
         self.name = "t-" + name            # 二段 name（目录/端点用）
         self.task_id = "task/" + self.name  # 路径式 id（AGENT_SELF，任务）
         self.home = os.path.join(self.root, "agents", "task", self.name)
@@ -180,6 +179,7 @@ class Env:
             "AGENTD_WRAP_EXIT_GRACE": "5",
             "FAKE_MODE": fake_mode, "FAKE_FLAG_DIR": self.flags,
             "PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/tmp"),
+            "AGENTD_DIR": AGENTD_DIR,
         }
         if extra_env:
             self.env.update(extra_env)
@@ -269,7 +269,7 @@ class Env:
                 os.killpg(os.getpgid(p.pid), signal.SIGKILL)
             except (OSError, ProcessLookupError):
                 pass
-        shutil.rmtree(self.root, ignore_errors=True)
+        cleanup_tree(self.root)
 
 
 def t1_normal():
@@ -548,7 +548,7 @@ def t12_sock_bind_failed():
     e = Env("t12")
     # 不改 AGENT_HOME（home 侧文件操作不受影响），只把 AGENT_ROOT 换成深树：
     # 端点 = <root>/run/agentd/<name>.sock 必超平台限（macOS 104 更严，同样命中）。
-    deep = tempfile.mkdtemp(prefix="wraptest-t12deep-")
+    deep = fixture_dir(prefix="wraptest-t12deep-")
     deep = os.path.join(deep, *(["d" * 16] * 8))
     os.makedirs(deep)
     e.env["AGENT_ROOT"] = deep
@@ -568,7 +568,7 @@ def t12_sock_bind_failed():
         base = deep
         for _ in range(8):
             base = os.path.dirname(base)
-        shutil.rmtree(base, ignore_errors=True)
+        cleanup_tree(base)
 
 
 def _w(path, text="export default function () {}\n"):
@@ -578,8 +578,8 @@ def _w(path, text="export default function () {}\n"):
     return path
 
 
-EXEC_PROFILE_MODEL = "llm-router/executor"      # 生产 bots/profiles/executor.json 的 model 现值
-PLANNER_MODEL = "llm-router/planner"            # 生产常驻 profile（dispatcher/*-lead）的 model 现值
+EXEC_PROFILE_MODEL = "fixture/executor"        # synthetic; never a real model lookup
+PLANNER_MODEL = "fixture/planner"              # synthetic persona asset
 
 
 def t29_child_exts():
@@ -907,7 +907,7 @@ def t_fake_settled_inflight():
         if p.poll() is None:
             p.kill()
             p.wait()
-        shutil.rmtree(e.root, ignore_errors=True)
+        cleanup_tree(e.root)
 
 
 # ---------- 末轮模型错误档（：exit 0 假成功收口） ----------

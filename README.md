@@ -1,6 +1,12 @@
 # pi-wrap — supervised RPC session wrapper
 
-平台仓入口与统一安装契约见 [agent-platform](../README.md)。
+Independent mechanism repository; caller workspaces and deployment are external.
+
+**Recovery candidate: BLOCKED (not a runnable integrated release).** Source is
+preserved through `1f650e88357b29908526245f6b7ccae2d5540464`, including its new
+wait tracking/replay calls. The authorized agentd pin below predates that API.
+Startup deliberately refuses the missing interface; no protocol copy, downgraded
+wait behavior, dependency-pin advance or production activation is included.
 
 `pi-rpc-wrap.py` launches one agent session as `pi --mode rpc`, holds its stdio,
 and passes the raw pi-RPC byte stream through to a unix socket
@@ -173,22 +179,56 @@ warnings are now written by the extension to pi's stderr ⇒
 `run/agentd/<name>.stderr.log` (the same tail the diagnosis file quotes), not to
 the wrapper's own log. In-session evidence is the read-only `/persona` command.
 
-## Sibling repo dependency
+## Explicit agentd dependency and compatibility boundary
 
-`proto.py` — the single source of the path/envelope/exit-code contract, mirrored by
-the TypeScript side of the supervisor — lives in the `agentd` repo. This repo
-imports it from `AGENTD_DIR` (default `../agentd`), so the two repos must be
-checked out side by side (or `AGENTD_DIR` must point at `agentd/`). Nothing is
-duplicated: two copies of the protocol would drift.
+Dependency: **agentd.git at `9625bdc15f853e49a6312d20dc429e23330e3d89`**.
+Full interface names and current incompatibility are recorded in
+[`recovery/dependencies.json`](recovery/dependencies.json).
+
+`proto.py` owns socket/ready paths, process identity and atomic file operations;
+`task_state.report_nonempty` is the sole report-presence predicate. New source
+also needs `wait_state.CurrentWaits(home, self_id)` with `sent`, `event`,
+`dialogs`, plus `DIALOG_METHODS`. **`wait_state.py` is absent at the fixed pin.**
+The wrapper therefore fails before spawning pi, with an actionable import error.
+A compatible, separately reviewed future pin is a follow-up integration task,
+not permission to change this pin or implement another state machine here.
+
+Nonempty `AGENTD_DIR` wins (expand `~`, absolute realpath). Without it only a
+real-source sibling directory named `agentd` is accepted for development. A bad
+explicit directory never falls back to the sibling, cwd, installed Python
+modules, or a unified platform checkout. Symlink entrypoints resolve source
+identity independently of workspace overrides. No agentd modules are vendored.
+
+The local `platform_paths.py` owns workspace-root contract v1: caller/module
+root inputs win, then nonempty `PLATFORM_WORKSPACE` (expand `~`, absolute), then
+the real source repository's parent. Empty override retains the default.
+Neither markers nor a repository-name list are needed. `persona.py` retains its
+existing explicit `--root` over `AGENT_ROOT` precedence. Toolface shell/driver
+entries use `HARNESS_WS` over this helper; their live model path is not part of
+recovery validation.
 
 ## Tests
 
 ```bash
-python3 test_persona.py       # resolution layer: output contract, merge semantics,
-                             # degrade matrix, CLI, cross-consumer equivalence
-python3 test_wrap.py          # emission + lifecycle: argv/env, handshake, convergence,
-                             # exit codes; no network, no real pi
+# Use an independently cloned, clean dependency at the exact revision above,
+# and an already available Linux Bash3.2 binary. Output must be a new directory.
+python3 -B recovery/run-tests.py --agentd /path/to/pinned-agentd \
+  --bash32 /path/to/bash-3.2 --output /path/to/new-isolated-results
 ```
+
+The runner enumerates every repository `test_*.py`, including unchanged original
+files. Current result: dependency (2), fakepi (2), thinking (4), helper/root (4,
+including 30 Bash scenarios / 120 actual Bash3.2 executions), and persona
+(86 reported assertions, including its preexisting optional kb-index skip)
+pass. `test_wrap.py` is **BLOCKED** at dependency preflight: no wrapper lifecycle,
+message, resident, model-error or task-tab replay integration PASS is claimed.
+The runner returns nonzero and keeps that log. Linux Bash3.2 is not macOS proof.
+
+No real model configuration, real pi/model, production workspace, live toolface
+driver, downloads, package installation or service startup is used. Fixture
+cleanup uses agentd's `safe_delete` with only newly created private base authority;
+fixture bases are retained. Shell clean validation executes only its root prefix
+and syntax check, never its destructive body.
 
 解析层使用合成资产验证机制；调用方的岗位政策与现有资产由调用方检查。仅修改能力正文或profile声明时，运行调用方的资产检查；修改解析或生命周期代码时，运行对应测试。
 

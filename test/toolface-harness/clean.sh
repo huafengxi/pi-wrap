@@ -5,7 +5,10 @@
 set -u
 untildify() { case "$1" in "~"|"~/"*) printf '%s' "$HOME${1#\~}";; *) printf '%s' "$1";; esac; }
 R="${HARNESS_ROOT:?HARNESS_ROOT 未设}"
-WS=$(untildify "${HARNESS_WS:-$HOME/m}")
+PYTHON=${PYTHON:-python3}
+HERE=$("$PYTHON" -c 'import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))' "$0")
+REPO=$(cd "$HERE/../.." && pwd)
+WS=$(untildify "${HARNESS_WS:-$("$PYTHON" "$REPO/platform_paths.py" "$REPO/pi-rpc-wrap.py")}")
 BASE=$(untildify "${HARNESS_BASE:-$WS/run/temp/toolface-harness}")
 rr=$(realpath "$R") || { echo "REFUSE: realpath 失败 $R"; exit 2; }
 base=$(realpath "$BASE") || { echo "REFUSE: realpath 失败 base"; exit 2; }

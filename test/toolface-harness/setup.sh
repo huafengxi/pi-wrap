@@ -9,13 +9,15 @@
 #   ./setup.sh                     # 建 $HARNESS_BASE/r-<时间戳>，把根路径打到 stdout 最后一行
 #   ./setup.sh <工作根路径>         # 指定根（仍须在临时基目录内）
 # env：
-#   HARNESS_WS    工作区根（缺省 $HOME/m；软链源 + 注入层位置的基准）
+#   HARNESS_WS    工作区根（优先；否则本仓 helper 的 workspace 契约）
 #   HARNESS_BASE  临时基目录（缺省 <HARNESS_WS>/run/temp/toolface-harness）
 #   HARNESS_PROD_ROOTS  冒号分隔的生产根清单（缺省 = 现场发现：WS 根 + 其下含 .git 的一级子目录）
 set -u
-HERE=$(cd "$(dirname "$0")" && pwd)
+PYTHON=${PYTHON:-python3}
+HERE=$("$PYTHON" -c 'import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))' "$0")
+REPO=$(cd "$HERE/../.." && pwd)
 untildify() { case "$1" in "~"|"~/"*) printf '%s' "$HOME${1#\~}";; *) printf '%s' "$1";; esac; }
-WS=$(untildify "${HARNESS_WS:-$HOME/m}")
+WS=$(untildify "${HARNESS_WS:-$("$PYTHON" "$REPO/platform_paths.py" "$REPO/pi-rpc-wrap.py")}")
 BASE=$(untildify "${HARNESS_BASE:-$WS/run/temp/toolface-harness}")
 R="${1:-$BASE/r-$(date +%Y%m%d-%H%M%S)}"
 

@@ -32,15 +32,19 @@ import sys
 import threading
 import time
 
+HARNESS_DIR = os.path.dirname(os.path.realpath(__file__))
+REPO = os.path.dirname(os.path.dirname(HARNESS_DIR))
+sys.path.insert(0, REPO)
+from platform_paths import workspace_root
+
 R = os.environ.get("HARNESS_ROOT", "")
-# 工作区根（约定值，可覆盖）：软链源、注入层与生产根发现的基准。
-WS = os.environ.get("HARNESS_WS", "~/m")
+# 工作区覆盖优先；默认遵循同仓 helper，不寻找统一仓。
+WS = os.environ.get("HARNESS_WS") or workspace_root(os.path.join(REPO, "pi-rpc-wrap.py"))
 # 临时基目录（可覆盖）：工作根必须在它内部。
 BASE_ENV = os.environ.get("HARNESS_BASE", "")
 # 注入层扩展相对工作区根的位置（= pi-rpc-wrap.py 的 PROFILE_LOADER_EXT_REL 同值；可覆盖）。
 LOADER_REL = os.environ.get("HARNESS_LOADER_REL", "pi-core/agent/extensions/profile-loader.ts")
 # 被测 wrap 脚本（缺省 = 本 harness 所在 checkout 的 pi-rpc-wrap.py；可覆盖）。
-HARNESS_DIR = os.path.dirname(os.path.abspath(__file__))
 WRAP = os.environ.get("HARNESS_WRAP", os.path.join(os.path.dirname(os.path.dirname(HARNESS_DIR)), "pi-rpc-wrap.py"))
 
 

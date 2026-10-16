@@ -16,10 +16,12 @@ import subprocess
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from platform_paths import workspace_root
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+from fixture_support import fixture_dir, cleanup_tree
+
+HERE = os.path.dirname(os.path.realpath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import persona                                                  # noqa: E402
@@ -76,7 +78,7 @@ class Tree:
     """临时工作区树 + 一个把告警收进列表的 emit（断言 warnings 用）。"""
 
     def __init__(self, tag):
-        self.root = tempfile.mkdtemp(prefix="persona-%s-" % tag)
+        self.root = fixture_dir(prefix="persona-%s-" % tag)
         self.lines = []
 
     def emit(self, fmt, *args):
@@ -132,7 +134,7 @@ class Tree:
         self.kb(os.path.join("lore", "library", "dom", "facts"),
                 [("a.md", "册 A 何时读"), ("noWhen.md", None)], copy_tool=True)
         if not with_lore:
-            shutil.rmtree(os.path.join(self.root, "lore"), ignore_errors=True)
+            cleanup_tree(os.path.join(self.root, "lore"))
             return {}
         self.kb(os.path.join("lore", "library", "dom", "cases"),
                 [("c.md", "案例 C 何时读")], copy_tool=False)
@@ -161,7 +163,7 @@ class Tree:
                     os.environ[k] = v
 
     def cleanup(self):
-        shutil.rmtree(self.root, ignore_errors=True)
+        cleanup_tree(self.root)
 
 
 SCHEMA_KEYS = {
