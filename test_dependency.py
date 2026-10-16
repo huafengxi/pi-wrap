@@ -1,6 +1,6 @@
-"""Pinned imports/report predicate and actionable failure of the new wait interface.
+"""Reviewed fixed dependency: single protocol, report predicate and refusals.
 
-A rejection is a passing negative test, NOT a passing wrapper integration test.
+Imports do not replace the real wrapper lifecycle/layout integration tests.
 """
 import json
 import os
@@ -13,7 +13,7 @@ import unittest
 from fixture_support import fixture_dir
 
 HERE = Path(__file__).resolve().parent
-PIN = "9625bdc15f853e49a6312d20dc429e23330e3d89"
+PIN = "ca35c53c6bd9c437615058126c5bcd2f97de2801"
 
 
 class DependencyTests(unittest.TestCase):
@@ -46,9 +46,19 @@ class DependencyTests(unittest.TestCase):
             code = '''import json, os, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(sys.argv[1]).resolve().parent))
 from agentd_dependency import require_agentd
-p = require_agentd("proto", "task_state", "envscrub")
-import proto, task_state, envscrub
-assert pathlib.Path(task_state.__file__).resolve().parent == pathlib.Path(p)
+p = require_agentd("proto", "task_state", "envscrub", "safe_delete", "wait_state")
+import proto, task_state, envscrub, safe_delete, wait_state
+for module in (proto, task_state, envscrub, safe_delete, wait_state):
+ assert pathlib.Path(module.__file__).resolve().parent == pathlib.Path(p)
+assert {'select', 'confirm', 'input', 'editor'} == set(wait_state.DIALOG_METHODS)
+import importlib.util
+spec=importlib.util.spec_from_file_location('candidate_wrapper', pathlib.Path(sys.argv[1]).resolve())
+wrapper=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(wrapper)
+assert wrapper.proto is proto
+assert wrapper.report_nonempty is task_state.report_nonempty
+assert wrapper.CurrentWaits is wait_state.CurrentWaits
+assert wrapper.DIALOG_METHODS is wait_state.DIALOG_METHODS
 r=pathlib.Path("report.md")
 assert not task_state.report_nonempty(r)
 r.write_bytes(b" \\n\\t")
@@ -66,13 +76,7 @@ print(json.dumps({"proto":proto.__file__, "report_nonempty":task_state.__file__,
                 explicit = None if sibling else dep
                 result = self.run_python(entry, code, explicit)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                # Full source retained, pin unchanged: startup must reject wait_state.
-                reject = self.run_python(entry, explicit=explicit)
-                self.assertNotEqual(reject.returncode, 0)
-                self.assertIn("wait_state.py", reject.stderr)
-                self.assertIn("Set AGENTD_DIR", reject.stderr)
-                self.assertNotIn("fake-pi boot", reject.stderr)
-                print(json.dumps({"layout": "sibling" if sibling else "explicit non-sibling", "entry": str(entry), "imports": result.stdout.strip(), "wrapper": "BLOCKED: wait_state missing at fixed pin"}))
+                print(json.dumps({"layout": "sibling" if sibling else "explicit non-sibling", "entry": str(entry), "imports": result.stdout.strip(), "wrapper": "single pinned protocol imported; lifecycle tested separately"}))
             # Explicit invalid configuration wins even when a valid sibling exists.
             bad = self.run_python(repo / "pi-rpc-wrap.py", explicit=self.base / "missing dependency")
             self.assertNotEqual(bad.returncode, 0)
