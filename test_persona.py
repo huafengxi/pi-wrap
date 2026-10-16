@@ -16,6 +16,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+from platform_paths import workspace_root
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
@@ -37,7 +40,7 @@ def ok(name, cond, detail=""):
 
 # ---------- 夹具 ----------
 
-KB_INDEX_SRC = os.path.join(os.path.dirname(HERE), "bots", "kb_index.py")
+KB_INDEX_SRC = os.path.join(workspace_root(__file__), "bots", "kb_index.py")
 EXEC_TEXT = "# executor baseline\n\ntask persona\n"
 CAP_TEXT = "# reviewer persona\n\nbe strict\n"
 

@@ -21,6 +21,9 @@ import tempfile
 import threading
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+from platform_paths import workspace_root
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 WRAP = os.path.join(HERE, "pi-rpc-wrap.py")
 FAKEPI = os.path.join(HERE, "fakepi_rpc.py")
@@ -149,7 +152,8 @@ class Env:
 
     def __init__(self, name, fake_mode="ok", extra_env=None, preseed_user=False,
                  with_prompt=True):
-        self.root = tempfile.mkdtemp(prefix="wraptest-%s-" % name)
+        # Keep socket fixtures below Unix sun_path limits, including on macOS.
+        self.root = tempfile.mkdtemp(prefix="wraptest-%s-" % name, dir="/tmp")
         self.name = "t-" + name            # 二段 name（目录/端点用）
         self.task_id = "task/" + self.name  # 路径式 id（AGENT_SELF，任务）
         self.home = os.path.join(self.root, "agents", "task", self.name)
@@ -1182,8 +1186,8 @@ def t43_heartbeat_prompt_anchor_lines():
     （任一侧改名即红）；② 位置在开头（两行先于「## 需求描述」）；③ 路径按 portablePath 同款口径
     渲染（$HOME 内 → 波浪号）；④ 参数行点名执行机 env。
     """
-    reg_path = os.path.join(HERE, "..", "tasks", "run.py")
-    core_path = os.path.join(HERE, "..", *EXT_DIR_PARTS, "core.ts")
+    reg_path = os.path.join(workspace_root(__file__), "tasks", "run.py")
+    core_path = os.path.join(workspace_root(__file__), *EXT_DIR_PARTS, "core.ts")
     with open(reg_path, encoding="utf-8") as f:
         reg = f.read()
     with open(core_path, encoding="utf-8") as f:
@@ -1220,7 +1224,7 @@ def t43_heartbeat_prompt_anchor_lines():
 
 def t45_spawn_command_contract():
     """tasks registrar 与 core.ts 的 spawn command 保持同一契约。"""
-    ws = os.path.normpath(os.path.join(HERE, ".."))
+    ws = workspace_root(__file__)
 
     def _read(*rel):
         with open(os.path.join(ws, *rel), encoding="utf-8") as f:
