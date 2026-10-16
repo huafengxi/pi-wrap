@@ -111,6 +111,7 @@ for _p in (_HERE, AGENTD_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 import proto  # noqa: E402
+from task_state import report_nonempty
 
 RING_MAX = 200            # 小环容量（行）：新连接短窗回放，完整基线走 get_entries
 STDERR_TAIL_MAX = 8192    # stderr 内存尾上限（字节）
@@ -505,27 +506,8 @@ class Wrap:
         return None, None
 
     def report_delivered(self):
-        """report.md 是否**非空在场**（判据单点 = scheduler.report_nonempty，惰性 import）。
-
-        为何必须「非空」而不是「存在」：此前两例的形态就是「exitcode=0 而 report.md
-        **零字节**」——按存在性判会让零字节报告算成已交付，前鉴形态一点没治。口径同源 =
-        dispatch/DISPATCH.md「完成判定」与 agentd/report.py 的 has_report。
-        惰性 import（不在模块顶部）：wrap 在每次 spawn 的关键路径上，顶部 import 面越小越好；
-        导入失败 ⇒ 退化为本地最小实现（getsize>0 ∧ 有非空白字节）+ WARN，不抛。
-        """
-        path = os.path.join(self.home, "report.md")
-        try:
-            import scheduler               # 同目录；判据单点，不另写一份
-            return bool(scheduler.report_nonempty(path))
-        except Exception as e:
-            log("WARN report_nonempty 单点不可导入（%r）→ 本地最小判定", e)
-        try:
-            if os.path.getsize(path) <= 0:
-                return False
-            with open(path, "rb") as f:
-                return bool(f.read().strip())
-        except OSError:
-            return False
+        """Check delivery evidence using the shared task-state contract."""
+        return report_nonempty(os.path.join(self.home, "report.md"))
 
     def _model_error_detail(self, entry, msg, delivered):
         """诊断的证据小节：末条 ts / stopReason / usage 全零事实 / 是否只有 thinking /
