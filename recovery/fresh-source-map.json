@@ -1,0 +1,93 @@
+{
+  "taskId": "516ryp",
+  "source_base": "1f650e88357b29908526245f6b7ccae2d5540464",
+  "source_end": "1156870f3bf23d00bd8ced0717fc63331e08e54b",
+  "first_parent_source_commits": [
+    "1090df79741716fac97c8f9e1b75e361d6e3f9c0",
+    "4dbd3ca779aae0ae9e7fb98182d77f826d3be436",
+    "1156870f3bf23d00bd8ced0717fc63331e08e54b"
+  ],
+  "mapping": [
+    {
+      "source_commit": "1090df79741716fac97c8f9e1b75e361d6e3f9c0",
+      "source_parent": "1f650e88357b29908526245f6b7ccae2d5540464",
+      "source_paths": [],
+      "no_op": true,
+      "reason": "git diff-tree for this source commit has no pi-wrap paths; no artificial empty projection commit"
+    },
+    {
+      "source_commit": "4dbd3ca779aae0ae9e7fb98182d77f826d3be436",
+      "source_parent": "1090df79741716fac97c8f9e1b75e361d6e3f9c0",
+      "source_paths": [
+        "pi-wrap/README.md",
+        "pi-wrap/pi-rpc-wrap.py"
+      ],
+      "no_op": false,
+      "target_commit": "b4357000c5d4553445418aadc2614154fde5a3f0",
+      "target_parent": "f89188fda24f803985fa1809cd40da5484ed1b10",
+      "paths": [
+        {
+          "source_before": {
+            "path": "pi-wrap/README.md",
+            "mode": "100644",
+            "type": "blob",
+            "blob": "2e28d7a816a445846d909f3778ce635d0d5d6ac9"
+          },
+          "source_after": {
+            "path": "pi-wrap/README.md",
+            "mode": "100644",
+            "type": "blob",
+            "blob": "fe010f1ccf18c7a16a4868bac9f5ea1882ea50f9"
+          },
+          "target_before": {
+            "path": "README.md",
+            "mode": "100644",
+            "type": "blob",
+            "blob": "da395dd901ec408ef8dc93cc5332559efa7af7e3"
+          },
+          "target_after": {
+            "path": "README.md",
+            "mode": "100644",
+            "type": "blob",
+            "blob": "4dd541103858747ed4dc66d7fe13d57b912d8851"
+          }
+        },
+        {
+          "source_before": {
+            "path": "pi-wrap/pi-rpc-wrap.py",
+            "mode": "100644",
+            "type": "blob",
+            "blob": "3352209d825a61e77abc6bc62412f7eb8f92f4af"
+          },
+          "source_after": {
+            "path": "pi-wrap/pi-rpc-wrap.py",
+            "mode": "100644",
+            "type": "blob",
+            "blob": "482b8c508320f24214b6fb4a79b09def738a4caa"
+          },
+          "target_before": {
+            "path": "pi-rpc-wrap.py",
+            "mode": "100644",
+            "type": "blob",
+            "blob": "87ea3d7ee1b3a122f6cd73ac65ae770f49e08c55"
+          },
+          "target_after": {
+            "path": "pi-rpc-wrap.py",
+            "mode": "100644",
+            "type": "blob",
+            "blob": "dd7b8636af71fc090210b340efd77884e248dcdc"
+          }
+        }
+      ]
+    },
+    {
+      "source_commit": "1156870f3bf23d00bd8ced0717fc63331e08e54b",
+      "source_parent": "4dbd3ca779aae0ae9e7fb98182d77f826d3be436",
+      "source_paths": [],
+      "no_op": true,
+      "reason": "git diff-tree for this source commit has no pi-wrap paths; no artificial empty projection commit"
+    }
+  ],
+  "projection_note": "target retains independent import/helper/root adaptations; six runtime deletion edits match source; README paragraph appended in corresponding Tests section",
+  "adaptation_note": "helper/interface, dependency/layout/removal tests, README current entry and new recovery files are separate independent-repository adaptation commit"
+}

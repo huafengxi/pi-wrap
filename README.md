@@ -2,14 +2,15 @@
 
 Independent mechanism repository; caller workspaces and deployment are external.
 
-**Dependency continuation candidate (not a production release).** The original
-`eb213ea103416c82bcbe57003047aa608dbf7443` remains historically BLOCKED; this
-continuation pins separately reviewed agentd and reruns both real layouts.
-Historical recovery records are retained, not relabeled as successful. Source is
-preserved through `1f650e88357b29908526245f6b7ccae2d5540464`, including its new
-wait tracking/replay calls. The authorized agentd pin below predates that API.
-Startup deliberately refuses the missing interface; no protocol copy, downgraded
-wait behavior, dependency-pin advance or production activation is included.
+**F-P offline candidate (not a production release).** Current recovery entry:
+[`recovery/FRESH.md`](recovery/FRESH.md), with the authoritative current dependency
+in [`recovery/fresh-dependencies.json`](recovery/fresh-dependencies.json).
+Source is continued through `1156870f3bf23d00bd8ced0717fc63331e08e54b`:
+the approved deletion removes persistent wait observation, not communication.
+The original `eb213ea103416c82bcbe57003047aa608dbf7443` remains historically
+BLOCKED; the later `f89188fda24f803985fa1809cd40da5484ed1b10` and its old A pin
+remain recoverable. Historical recovery records/verifier scope are unchanged.
+This candidate is not activated and does not validate F-C/P3 or production.
 
 `pi-rpc-wrap.py` launches one agent session as `pi --mode rpc`, holds its stdio,
 and passes the raw pi-RPC byte stream through to a unix socket
@@ -184,18 +185,19 @@ the wrapper's own log. In-session evidence is the read-only `/persona` command.
 
 ## Explicit agentd dependency and compatibility boundary
 
-Current dependency: **agentd.git at `ca35c53c6bd9c437615058126c5bcd2f97de2801`**.
-Full interfaces and old/new pin handoff are recorded in
-[`recovery/continuation-dependencies.json`](recovery/continuation-dependencies.json).
-The old `dependencies.json` records the original blocked candidate, unchanged.
+Current dependency: **agentd.git at `b40e0d027b1ebbe072b0edc0929e0411da3c37af`**.
+Full interfaces and pin handoff are recorded in `recovery/fresh-dependencies.json`.
+`dependencies.json` and `continuation-dependencies.json` remain frozen historical
+records for their original candidates; neither is the current dependency entry.
 
 `proto.py` owns socket/ready paths, process identity and atomic file operations;
 `task_state.report_nonempty` is the sole report-presence predicate. New source
-also needs `wait_state.CurrentWaits(home, self_id)` with `sent`, `event`,
-`dialogs`, plus `DIALOG_METHODS`. The current reviewed pin supplies these, as
-well as `envscrub` and `safe_delete` used by tests. Import probes check actual
-module paths and wrapper object identity; real lifecycle and native RPC tests
-provide separate behavioral evidence. No second wait-state machine is vendored.
+needs `wait_state.DialogRequests()` with `sent`, `event`, `dialogs`, plus the four
+`DIALOG_METHODS`. The helper imports these modules from the selected directory,
+checks actual module origins and rejects missing/old interfaces or foreign cached
+modules. It never falls back to CurrentWaits or disables dialog/replay. The fixed
+A also supplies `envscrub` and `safe_delete` used by tests. No second dialog
+state machine, wait observer or current_tools write chain is vendored.
 
 Nonempty `AGENTD_DIR` wins (expand `~`, absolute realpath). Without it only a
 real-source sibling directory named `agentd` is accepted for development. A bad
@@ -214,30 +216,34 @@ recovery validation.
 ## Tests
 
 ```bash
-# Use an independently cloned, clean dependency at the exact revision above,
-# and an already available Linux Bash3.2 binary. Output must be a new directory.
-python3 -B recovery/run-tests.py --agentd /path/to/pinned-agentd \
-  --bash32 /path/to/bash-3.2 --caller-inputs /path/to/frozen-static-inputs \
-  --output /path/to/new-isolated-results
+# Fixed object exports from actual bare; no installs/downloads/real pi.
+# Output must not exist; short /tmp output keeps Unix socket paths bounded.
+python3 -B recovery/fresh-run-tests.py --agentd-bare /path/to/agentd.git \
+  --caller-repo /path/to/caller --bash32 /path/to/bash-3.2 \
+  --output /tmp/new-short-results
 ```
 
 The runner enumerates every repository `test_*.py`, including unchanged original
 files, in both sibling and arbitrary non-sibling + explicit `AGENTD_DIR` layouts,
 with space paths and unrelated cwd. It also runs `test_layout_integration.py`:
-real/relative/symlink lifecycle with repository fakepi, actual file-wait producer
-and report reply, four native dialog methods, multiple observers, live replay
+real/relative/symlink lifecycle with repository fakepi, exact-ref file reply
+(no report wait-cell), four dialog methods, multiple observers, live replay
 after ring eviction, and no resolved-dialog resurrection. The complete inherited
 `test_wrap.py` covers report/model-error, message/readiness, resident, persona
 emission, identity/envscrub and actual child `W_WORKSPACE`.
 
-`--caller-inputs` is a synthetic read-only root with `tasks/run.py` and
-`pi-core/agent/extensions/agentd/core.ts` at the explicit revision in the new
-dependency metadata. These are only read by T43/T45 static cross-file checks;
-never executed or used as runtime fallback. The runner records their SHA256.
-No production root is needed. P14 kb-index remains an optional **skip**, not an
+Caller inputs are exported read-only from fixed `fc5d66a08ff05122a0fa01e781903f1eed54a9a5`
+(containing producer deletion 967cf7d). T43/T45 read `tasks/run.py`/`core.ts`
+statically; A's communication regression executes the real TS ask producer and
+precise ref reply/timeout, with mock API and synthetic mailboxes. Optional native
+helper and marked JS inputs are explicit read-only exports, never real pi/browser.
+The runner records hashes, environments, return codes and full logs. No caller
+is deployed or used as runtime import fallback. No production root is needed. P14 kb-index remains an optional **skip**, not an
 executed PASS (the legacy persona counter includes it; results must separate it).
-New results are in `recovery/continuation-test-results.json`; old failure records
-remain unchanged. Nonzero results are retained. Linux Bash3.2 is not macOS proof.
+New run results are in the selected output directory; old
+`recovery/continuation-test-results.json` and failure records remain unchanged.
+A's read-only current_tools/10-column report tests are separate from P lifecycle
+counts. No current_tools function is imported by P runtime. Nonzero results are retained. Linux Bash3.2 is not macOS proof.
 
 No real model configuration, real pi/model, production workspace, live toolface
 driver, downloads, package installation or service startup is used. Fixture

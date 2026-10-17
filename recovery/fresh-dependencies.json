@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "taskId": "516ryp",
+  "status": "offline candidate, not activated; no independent review claimed",
+  "agentd": {
+    "repository": "agentd.git",
+    "revision": "b40e0d027b1ebbe072b0edc0929e0411da3c37af",
+    "previous_revision": "ca35c53c6bd9c437615058126c5bcd2f97de2801",
+    "interfaces": {
+      "proto": "task_sock_path, task_ready_path, proc identity and atomic IO",
+      "task_state": "report_nonempty",
+      "wait_state": "DialogRequests() with event/sent/dialogs; DIALOG_METHODS=select/confirm/input/editor",
+      "envscrub": "scrub_env (tests)",
+      "safe_delete": "safe_rmtree (fixtures only)"
+    },
+    "module_sha256": {
+      "proto.py": "0b83766e7d0a1b0a6acd2aa09c28132b36af3a34de27f5840a307d6f5caa3cae",
+      "task_state.py": "afae39c4c6d1f07abd54294fe7729425b996a468e31f5db1789303ed71f729e9",
+      "wait_state.py": "8d257673d159b85199b9461fb09ed4155663b2f21ccaab125c0e8ebb5e607fef",
+      "envscrub.py": "4f4845e49b889f41bfd8e950e9313dcb1b3146377927cd339c4805735bb31f4a",
+      "safe_delete.py": "8d53e5f696d6735e8b1156d256fd51acfd02ed38682f311d4876952ec6cef754"
+    }
+  },
+  "source": {
+    "base": "1f650e88357b29908526245f6b7ccae2d5540464",
+    "revision": "1156870f3bf23d00bd8ced0717fc63331e08e54b"
+  },
+  "caller_inputs": {
+    "revision": "fc5d66a08ff05122a0fa01e781903f1eed54a9a5",
+    "producer_deletion": "967cf7d53eb5cca9af645813535a9661b1b3e5d9",
+    "files": [
+      "tasks/run.py",
+      "pi-core/agent/extensions/agentd/core.ts",
+      "pi-core/agent/extensions/agentd/ask-user-child.ts",
+      "pi-core/agent/extensions/agentd/tests/ask-wait.test.mjs"
+    ]
+  },
+  "historical_records": [
+    "dependencies.json",
+    "continuation-dependencies.json",
+    "CONTINUATION.md",
+    "verify.py",
+    "run-tests.py"
+  ],
+  "s_to_a0": "unchanged; not a consumer selected here"
+}

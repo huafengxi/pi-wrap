@@ -2,6 +2,7 @@
 
 Imports do not replace the real wrapper lifecycle/layout integration tests.
 """
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -13,7 +14,8 @@ import unittest
 from fixture_support import fixture_dir
 
 HERE = Path(__file__).resolve().parent
-PIN = "ca35c53c6bd9c437615058126c5bcd2f97de2801"
+METADATA = json.loads((HERE / 'recovery/fresh-dependencies.json').read_text())
+PIN = METADATA['agentd']['revision']
 
 
 class DependencyTests(unittest.TestCase):
@@ -21,8 +23,11 @@ class DependencyTests(unittest.TestCase):
         self.base = Path(fixture_dir(prefix="dep-"))
         self.home = self.base / "empty home"
         self.home.mkdir()
-        self.source = Path(os.environ["AGENTD_DIR"]).resolve()
-        self.assertEqual(subprocess.check_output(["git", "-C", str(self.source), "rev-parse", "HEAD"], text=True).strip(), PIN)
+        from agentd_dependency import require_agentd
+        self.source = Path(require_agentd('proto', 'task_state', 'wait_state', 'envscrub', 'safe_delete')).resolve()
+        for name, digest in METADATA['agentd']['module_sha256'].items():
+            self.assertEqual(hashlib.sha256((self.source / name).read_bytes()).hexdigest(), digest)
+        print('fixed dependency:', PIN, str(self.source), flush=True)
 
     def run_python(self, entry, code=None, explicit=None, cwd=None):
         env = {"PATH": os.environ["PATH"], "HOME": str(self.home), "PYTHONDONTWRITEBYTECODE": "1",
@@ -57,7 +62,8 @@ wrapper=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wrapper)
 assert wrapper.proto is proto
 assert wrapper.report_nonempty is task_state.report_nonempty
-assert wrapper.CurrentWaits is wait_state.CurrentWaits
+assert wrapper.DialogRequests is wait_state.DialogRequests
+assert not hasattr(wait_state, 'CurrentWaits')
 assert wrapper.DIALOG_METHODS is wait_state.DIALOG_METHODS
 r=pathlib.Path("report.md")
 assert not task_state.report_nonempty(r)
@@ -70,7 +76,7 @@ assert not task_state.report_nonempty(r)
 assert not task_state.report_nonempty(pathlib.Path("."))
 x=envscrub.scrub_env(base={"AGENT_SELF":"task/stale", "AGENT_ROOT":"stale", "KEEP":"ok"})
 assert "AGENT_SELF" not in x and "AGENT_ROOT" not in x and x["KEEP"]=="ok"
-print(json.dumps({"proto":proto.__file__, "report_nonempty":task_state.__file__, "envscrub":envscrub.__file__}))
+print(json.dumps({m.__name__:m.__file__ for m in (proto, task_state, envscrub, safe_delete, wait_state)}))
 '''
             for entry in (repo / "pi-rpc-wrap.py", link):
                 explicit = None if sibling else dep
@@ -99,6 +105,28 @@ print(json.dumps({"proto":proto.__file__, "report_nonempty":task_state.__file__,
         result = self.run_python(repo / "pi-rpc-wrap.py", explicit=bad)
         self.assertIn("task_state.py", result.stderr)
         self.assertIn("wait_state.py", result.stderr)
+
+    def test_old_interface_is_refused_not_downgraded(self):
+        old = self.base / 'old interface'
+        shutil.copytree(self.source, old, ignore=shutil.ignore_patterns('.git', '__pycache__'))
+        (old / 'wait_state.py').write_text('class CurrentWaits: pass\nDIALOG_METHODS={"select","confirm","input","editor"}\n')
+        result = self.run_python(HERE / 'pi-rpc-wrap.py', explicit=old)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('requires agentd wait_state.DialogRequests', result.stderr)
+        self.assertIn('not a compatible fallback', result.stderr)
+        print('old interface refused:', result.returncode, result.stderr.strip())
+
+    def test_foreign_cached_module_is_refused(self):
+        code = '''import pathlib, sys, types
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]).resolve().parent))
+foreign=types.ModuleType('wait_state'); foreign.__file__='/synthetic/foreign/wait_state.py'
+sys.modules['wait_state']=foreign
+from agentd_dependency import require_agentd
+require_agentd('wait_state')
+'''
+        result = self.run_python(HERE / 'pi-rpc-wrap.py', code, self.source)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('foreign cached agentd module', result.stderr)
 
 
 if __name__ == "__main__":
