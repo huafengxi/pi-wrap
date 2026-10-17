@@ -42,7 +42,7 @@ class DependencyTests(unittest.TestCase):
             parent = self.base / ("sibling with spaces" if sibling else "arbitrary layout")
             repo = parent / "wrap checkout"
             repo.mkdir(parents=True)
-            for name in ("agentd_dependency.py", "pi-rpc-wrap.py", "persona.py"):
+            for name in ("agentd_dependency.py", "pi-rpc-wrap.py", "transport.py", "persona.py"):
                 shutil.copy(HERE / name, repo)
             dep = parent / "agentd" if sibling else self.base / "elsewhere" / "pinned dependency"
             shutil.copytree(self.source, dep, ignore=shutil.ignore_patterns(".git", "__pycache__"))
@@ -92,7 +92,7 @@ print(json.dumps({m.__name__:m.__file__ for m in (proto, task_state, envscrub, s
     def test_nonsibling_missing_dependency_does_not_search_unified_repo(self):
         repo = self.base / "detached with spaces"
         repo.mkdir()
-        for name in ("pi-rpc-wrap.py", "agentd_dependency.py"):
+        for name in ("pi-rpc-wrap.py", "transport.py", "agentd_dependency.py"):
             shutil.copy(HERE / name, repo)
         result = self.run_python(repo / "pi-rpc-wrap.py")
         self.assertNotEqual(result.returncode, 0)

@@ -2,8 +2,17 @@
 
 Independent mechanism repository; caller workspaces and deployment are external.
 
-**F-P offline candidate (not a production release).** Current recovery entry:
-[`recovery/FRESH.md`](recovery/FRESH.md), with the authoritative current dependency
+**H1 offline fakepi candidate (not activated, not a production release).**
+The ordinary `pi_host.py` entry and existing agent adapter share one
+`transport.Transport` PIPE/socket implementation. Ordinary sessions need no
+agent identity/registration/runtime tree and have no report/settle policy.
+See **[HOST.md](HOST.md)** for explicit configuration, ownership, local session
+identity/locking, real wait vs host crash, lease propagation, limitations and the
+additive [`recovery/h1-run-tests.py`](recovery/h1-run-tests.py) fixed-input runner.
+H1 does not implement web/receiver/reaper routing, H2, Y1 or deployment.
+
+The preceding F-P recovery entry remains frozen:
+[`recovery/FRESH.md`](recovery/FRESH.md), with the authoritative unchanged A dependency
 in [`recovery/fresh-dependencies.json`](recovery/fresh-dependencies.json).
 Source is continued through `1156870f3bf23d00bd8ced0717fc63331e08e54b`:
 the approved deletion removes persistent wait observation, not communication.
@@ -12,7 +21,8 @@ BLOCKED; the later `f89188fda24f803985fa1809cd40da5484ed1b10` and its old A pin
 remain recoverable. Historical recovery records/verifier scope are unchanged.
 This candidate is not activated and does not validate F-C/P3 or production.
 
-`pi-rpc-wrap.py` launches one agent session as `pi --mode rpc`, holds its stdio,
+The remainder of this README describes the **agent adapter**, not ordinary
+session completion. `pi-rpc-wrap.py` launches one agent session as `pi --mode rpc`, holds its stdio,
 and passes the raw pi-RPC byte stream through to a unix socket
 (`<root>/run/agentd/<taskId>.sock`) so an observer/interactor can drive the live
 session. It is, by design, "a socat with judgement": every observation/interaction

@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "taskId": "8pm0lt",
+  "status": "H1 offline fakepi candidate only; no active caller/deployment",
+  "pi_wrap_base": "afec43d015c7955687c1d1c614af353d52caeedb",
+  "agentd_revision": "b40e0d027b1ebbe072b0edc0929e0411da3c37af",
+  "agentd_interfaces_and_hashes": "fresh-dependencies.json",
+  "generic_runtime_imports": ["proto.py", "wait_state.py"],
+  "agent_additional_runtime_imports": ["task_state.py"],
+  "test_only_agentd_imports": ["envscrub.py", "safe_delete.py"],
+  "serviced_test_revision": "4f99b25d191f61734b6b1ef89b456014413aad92",
+  "serviced_legacy_agentd_revision": "9625bdc15f853e49a6312d20dc429e23330e3d89",
+  "legacy_records": "All pre-H1 recovery files are frozen; h1-run-tests.py is the additive H1 runner.",
+  "socket_legacy_oracles_source": "task/0uzhg3 socket-review.py, review-fakepi.py, guard-launch.py; path/interpreter parameterization only"
+}

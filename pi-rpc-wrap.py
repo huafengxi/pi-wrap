@@ -112,10 +112,8 @@ AGENTD_DIR = require_agentd("proto", "task_state", "wait_state")
 import proto
 from wait_state import DialogRequests, DIALOG_METHODS  # noqa: E402
 from task_state import report_nonempty
+from transport import Transport, LaunchConfig, RING_MAX, STDERR_TAIL_MAX, DIAG_STDERR_LIMIT
 
-RING_MAX = 200            # 小环容量（行）：新连接短窗回放，完整基线走 get_entries
-STDERR_TAIL_MAX = 8192    # stderr 内存尾上限（字节）
-DIAG_STDERR_LIMIT = 2048  # diagnosis.md 内 stderr 尾展示上限（字节）
 SETTLE_WINDOW = 0.5       # 收敛竞态窗（秒）：吸收临末注入
 INIT_PROMPT_TIMEOUT = 60  # 初始投递回执超时（秒）
 EXIT_GRACE = 15           # 关 stdin 后等 pi 退出的宽限（秒），超时 SIGTERM
@@ -172,7 +170,7 @@ def log(fmt, *args):
     sys.stderr.flush()
 
 
-class Wrap:
+class Wrap(Transport):
     def __init__(self):
         self.home = os.environ.get("AGENT_HOME", "")
         self.root = os.environ.get("AGENT_ROOT", "")
@@ -221,15 +219,7 @@ class Wrap:
         self.arm_timeout = _env_float(
             "AGENTD_WRAP_ARM_TIMEOUT", CHILD_ARM_TIMEOUT, CHILD_ARM_TIMEOUT)
 
-        self.pi = None                 # pi 子进程句柄
-        self.ring = deque(maxlen=RING_MAX)
-        self.lock = threading.Lock()   # 守护 conn / stdin 写
-        self.send_lock = threading.Lock()  # 对当前连接的全部写（泵转发/环回放）串行化，
-                                           # 防两线程 sendall 交错擕裂 JSON 行
-        self.conn = None               # 当前活跃观测连接（唯一）
-        self.stdin_open = True
-        self.stderr_tail = deque()     # bytes 片段，合计 ≤ STDERR_TAIL_MAX
-        self.stderr_len = 0
+        self.init_transport()
         # 收敛判定状态
         self.settled = False           # 观察到 agent_settled（待决）
         self.inflight = 0              # 在飞轮计数（agent_start/agent_end 配对）
@@ -240,63 +230,17 @@ class Wrap:
         self.init_resp = None
         self.diag_written = False
         self.converge_timeout = False   # 收敛宽限看门狗动过手（诊断阶段判定用）
-        self.warned_oversize = False   # 丢弃事件的 WARN 去重（每进程只打一次，见 _read_stdout）
-        self.warned_badjson = False    # 同上：非 JSON 行分支
-        self.srv = None
-        self.dialog_requests = DialogRequests()
 
     # ---------- socket 生命周期 ----------
 
-    def setup_socket(self):
-        d = os.path.dirname(self.sock_path)
-        os.makedirs(d, exist_ok=True)
-        # 陈旧节点接管：.pid 伴生档身份校验（杀纪律口径：(pid,procStart) 二元组）
-        doc = proto.read_json(self.pid_file)
-        if isinstance(doc, dict) and doc.get("pid"):
-            if proto.pid_identity_ok(doc.get("pid"), doc.get("procStart")):
-                log("FATAL: socket %s 已被存活的封装进程持有（pid=%s），拒启防双宿主",
-                    self.sock_path, doc.get("pid"))
-                sys.exit(1)
-            log("陈旧观测端点（持锁者已死），接管: %s", self.sock_path)
-            for p in (self.sock_path, self.pid_file):
-                try:
-                    os.unlink(p)
-                except OSError:
-                    pass
-        self.srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        try:
-            self.srv.bind(self.sock_path)
-        except OSError as e:
-            # 端点是 AF_UNIX 路径，受内核 sun_path 上限约束（Linux 108 / macOS
-            # 104 字节）：root 过深（如 mac TMPDIR 下的临时树）会超长。
-            # 专属诊断阶段点名——不再混入通用 wrap_error 兑底。
-            # 判定口径：CPython unix_bind 进内核前自预检长度，超长抛
-            # OSError('AF_UNIX path too long') 且 errno=None；内核侧真错才带 errno。
-            # 两条信号取并集，「超平台限换更浅 root」提示才真实可达。
-            import errno as _errno
-            extra = "bind 失败: %r" % e
-            if e.errno == _errno.ENAMETOOLONG \
-                    or "path too long" in str(e).lower():
-                extra += "；端点路径超平台 sun_path 上限（Linux 108 / macOS 104 字节），需换更浅的 root"
-            log("FATAL: 观测端点 bind 失败: %s (%r)", self.sock_path, e)
-            self.srv.close()
-            self.diagnose("sock_bind_failed", 1, extra=extra)
-            sys.exit(1)
-        os.chmod(self.sock_path, 0o600)
-        self.srv.listen(4)
-        proto.atomic_write_json(self.pid_file, {
-            "pid": os.getpid(), "procStart": proto.proc_starttime(os.getpid()),
-            "startedAt": proto.now_ts(), "task": self.task_id})
-        atexit.register(self.cleanup_socket)
-        log("观测端点就绪: %s", self.sock_path)
+    def socket_metadata(self):
+        name = (self.session_name or '[resident %s]' % self.name) if self.resident else '[task %s]' % self.name
+        return dict(super().socket_metadata(), task=self.task_id, sessionName=name)
 
     def cleanup_socket(self):
-        for p in (self.sock_path, self.pid_file,
-                  self.init_ok_file, self.recv_armed_file):
-            try:
-                os.unlink(p)
-            except OSError:
-                pass
+        if self.owns_socket():
+            self.clear_ready_marks()
+        super().cleanup_socket()
 
     # ---------- 就绪握手（P0 spawn 竞态） ----------
 
@@ -433,16 +377,12 @@ class Wrap:
             # 就绪门信号通道（只任务形态：resident 不注入子端扩展，其主端 receiver 行为不变）。
             env["AGENTD_WRAP_INIT_OK"] = self.init_ok_file
             env["AGENTD_WRAP_RECV_ARMED"] = self.recv_armed_file
-        self.pi = subprocess.Popen(
-            argv,
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,    # 继承本进程进程组：杀纪律组杀覆盖（§5.5）
-            env=env)
-        threading.Thread(target=self._read_stdout, daemon=True,
-                         name="wrap-stdout").start()
-        threading.Thread(target=self._read_stderr, daemon=True,
-                         name="wrap-stderr").start()
-        log("pi spawned pid=%d session=%s", self.pi.pid, self.session_file)
+        self.launch(LaunchConfig(
+            session_file=self.session_file, cwd=os.getcwd(),
+            session_name=argv[argv.index("-n") + 1], pi_binary=self.pi_bin,
+            extension_argv=tuple(argv[argv.index("-n") + 2:]),
+            socket_path=self.sock_path, env=env))
+
 
     def session_has_user_message(self):
         """幂等判定：会话 jsonl 已有 user 消息（复活/重放场景）→ 跳过初始投递。"""
@@ -641,77 +581,13 @@ class Wrap:
 
     # ---------- pi stdin 单写者 ----------
 
-    def pi_send(self, raw_line):
-        """单写者串行写入 pi stdin（与透传上行、自身命令复用同一把锁）。"""
-        with self.lock:
-            if not self.stdin_open or self.pi is None or self.pi.stdin is None:
-                return False
-            try:
-                self.pi.stdin.write(
-                    raw_line if raw_line.endswith(b"\n") else raw_line + b"\n")
-                self.pi.stdin.flush()
-                try:
-                    self.dialog_requests.sent(json.loads(raw_line))
-                except (ValueError, TypeError):
-                    pass
-                return True
-            except (OSError, ValueError):
-                self.stdin_open = False
-                return False
 
-    def close_pi_stdin(self):
-        with self.lock:
-            if not self.stdin_open:
-                return
-            self.stdin_open = False
-            try:
-                self.pi.stdin.close()
-            except (OSError, AttributeError):
-                pass
 
     # ---------- stdout/stderr 泵 ----------
 
-    def _read_stdout(self):
-        """持续吸走 pi stdout（无论有无人观测）：入环 + 转发当前连接 + 收敛解析。"""
-        try:
-            for raw in iter(lambda: self.pi.stdout.readline(), b""):
-                if len(raw) > 16 * 1024 * 1024:
-                    # 静默丢事件 ⇒ 可能吞掉一枚 agent_end ⇒ inflight 永久泄漏 ⇒ 收敛不成立。
-                    # WARN 每进程只打一次，且文案不含每轮变化的可变量（否则去重失效刷屏）。
-                    if not self.warned_oversize:
-                        self.warned_oversize = True
-                        log("WARN 单行 > 16MB 上限，本次丢弃的是一行 pi stdout 事件；"
-                            "若其中含 agent_end，inflight 会泄漏、收敛改由 hang 看门狗"
-                            "收口。本告警每进程只打一次")
-                    continue                     # 单行上限（对齐 sessiond 口径）
-                try:
-                    obj = json.loads(raw)
-                except ValueError:
-                    # 同上：非 JSON 行里若夹带 agent_end 同样泄漏 inflight。
-                    if not self.warned_badjson:
-                        self.warned_badjson = True
-                        log("WARN json.loads 失败，本次丢弃的是一行 pi stdout 事件；"
-                            "若其中含 agent_end，inflight 会泄漏、收敛改由 hang 看门狗"
-                            "收口。本告警每进程只打一次")
-                    continue
-                # Serialize live delivery with the in-memory dialog baseline
-                # for attach replay, even when no browser/socket is connected.
-                with self.send_lock:
-                    if isinstance(obj, dict):
-                        self._on_event(obj)
-                    self.ring.append(raw)
-                    with self.lock:
-                        c = self.conn
-                    if c is not None:
-                        try:
-                            c.sendall(raw)
-                        except OSError:
-                            self._drop_conn(c)
-        except (OSError, ValueError):
-            pass
 
     def _on_event(self, obj):
-        self.dialog_requests.event(obj)
+        super()._on_event(obj)
         t = obj.get("type")
         if t == "response" and obj.get("id", "").startswith("init-"):
             self.init_resp = obj
@@ -738,115 +614,14 @@ class Wrap:
     def _turn_activity(self):
         self.activity = True
 
-    def _read_stderr(self):
-        """pi stderr 泵：**到达即写**（不等 EOF）。
 
-        硬要求 = 小额 stderr 在子进程**存活期**就落 `run/agentd/<name>.stderr.log`：
-        `BufferedReader.read(n)` 攒满 n ∨ EOF 才返回 ⇒ 注入层的装配摘要行与全部 fail-soft
-        WARN（都远小于 n）在活会话期恒不可见；而换代/kill 路径上读端（本进程）与写端（pi）
-        同死 ⇒ 卡在管道缓冲里的内容无人读、永久丢失。⇒ 任何依赖 EOF flush 的形态（等退出
-        再落盘 / 只调 flush 时机 / 加大缓冲）在那条路上恒失效，必须用 `read1(n)`（至多一次
-        底层 read，有数据即返回；EOF 仍回 b""）∨ 对 raw fd `os.read`。内存尾（stderr_tail /
-        STDERR_TAIL_MAX）与诊断尾同源，语义不变。
-        """
-        try:
-            with open(self.stderr_log, "ab") as lf:
-                while True:
-                    d = self.pi.stderr.read1(4096)
-                    if not d:
-                        break
-                    lf.write(d)
-                    lf.flush()
-                    self.stderr_tail.append(d)
-                    self.stderr_len += len(d)
-                    while self.stderr_len > STDERR_TAIL_MAX:
-                        drop = self.stderr_tail.popleft()
-                        self.stderr_len -= len(drop)
-        except (OSError, ValueError):
-            pass
-
-    def stderr_tail_text(self):
-        tail = b"".join(self.stderr_tail)[-DIAG_STDERR_LIMIT:]
-        return tail.decode("utf-8", "replace")
 
     # ---------- 观测连接（透传） ----------
 
-    def accept_loop(self):
-        while True:
-            try:
-                conn, _ = self.srv.accept()
-            except OSError:
-                return
-            old = None
-            try:
-                with self.send_lock:
-                    with self.lock:
-                        old = self.conn
-                        self.conn = conn
-                    if old is not None:
-                        self._shutdown_close(old)
-                    for raw in self.replay_lines():
-                        conn.sendall(raw)
-            except OSError:
-                self._drop_conn(conn)
-                continue
-            log("观测连接就位（替换=%s）", old is not None)
-            threading.Thread(target=self._conn_relay, args=(conn,),
-                             daemon=True, name="wrap-relay").start()
 
-    def replay_lines(self):
-        # Raw event history is not a dialog baseline. Resolved/expired requests
-        # must not be resurrected; live requests survive ring eviction.
-        for raw in list(self.ring):
-            try:
-                obj = json.loads(raw)
-            except ValueError:
-                continue
-            if (isinstance(obj, dict) and obj.get("type") == "extension_ui_request"
-                    and obj.get("method") in DIALOG_METHODS):
-                continue
-            yield raw
-        for request in self.dialog_requests.dialogs():
-            yield (json.dumps(request, ensure_ascii=False) + "\n").encode("utf-8")
 
-    def _conn_relay(self, conn):
-        buf = b""
-        while True:
-            with self.lock:
-                if self.conn is not conn:
-                    return                       # 已被新连接替换
-            try:
-                d = conn.recv(65536)
-            except OSError:
-                break
-            if not d:
-                break
-            buf += d
-            while b"\n" in buf:
-                line, buf = buf.split(b"\n", 1)
-                if not line.strip():
-                    continue
-                if not self.pi_send(line):
-                    self._drop_conn(conn)
-                    return
-        self._drop_conn(conn)
 
-    @staticmethod
-    def _shutdown_close(conn):
-        try:
-            conn.shutdown(socket.SHUT_RDWR)
-        except OSError:
-            pass
-        try:
-            conn.close()
-        except OSError:
-            pass
 
-    def _drop_conn(self, conn):
-        with self.lock:
-            if self.conn is conn:
-                self.conn = None
-        self._shutdown_close(conn)
 
     # ---------- 完成收敛 ----------
 
