@@ -249,6 +249,13 @@ and syntax check, never its destructive body.
 
 `test/toolface-harness/` — live-session evidence harness (real pi + real model slot); not invoked by `test_wrap.py`; excluded from CI. Single source: `test/toolface-harness/README.md`.
 
+Socket attach retains an in-memory dialog baseline (responses, deadlines and
+existing tool/turn completion cleanup); it writes no wait snapshot and observes
+no file-ask tool updates. Unmodified native RPC emits no internal signal
+settlement event, so this baseline is not proof of a current blocking wait and
+is not used by the task report. Existing loaded wrappers are not hot-updated.
+The native signal/replay limitation remains; no native patch is installed here.
+
 `fakepi_rpc.py` is the `pi --mode rpc` double: it speaks the same JSON-lines
 protocol, can script failures (prompt rejection, false `agent_settled`, stream
 interrupts, self-kill with a chosen exit code) and writes an argv/env snapshot so

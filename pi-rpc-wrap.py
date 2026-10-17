@@ -110,7 +110,7 @@ if _HERE not in sys.path:
 from agentd_dependency import require_agentd
 AGENTD_DIR = require_agentd("proto", "task_state", "wait_state")
 import proto
-from wait_state import CurrentWaits, DIALOG_METHODS  # noqa: E402
+from wait_state import DialogRequests, DIALOG_METHODS  # noqa: E402
 from task_state import report_nonempty
 
 RING_MAX = 200            # 小环容量（行）：新连接短窗回放，完整基线走 get_entries
@@ -243,7 +243,7 @@ class Wrap:
         self.warned_oversize = False   # 丢弃事件的 WARN 去重（每进程只打一次，见 _read_stdout）
         self.warned_badjson = False    # 同上：非 JSON 行分支
         self.srv = None
-        self.waits = CurrentWaits(self.home, self.task_id)
+        self.dialog_requests = DialogRequests()
 
     # ---------- socket 生命周期 ----------
 
@@ -651,7 +651,7 @@ class Wrap:
                     raw_line if raw_line.endswith(b"\n") else raw_line + b"\n")
                 self.pi.stdin.flush()
                 try:
-                    self.waits.sent(json.loads(raw_line))
+                    self.dialog_requests.sent(json.loads(raw_line))
                 except (ValueError, TypeError):
                     pass
                 return True
@@ -694,8 +694,8 @@ class Wrap:
                             "若其中含 agent_end，inflight 会泄漏、收敛改由 hang 看门狗"
                             "收口。本告警每进程只打一次")
                     continue
-                # Serialize live delivery with attach replay. Current waits
-                # are maintained even when no browser/socket is connected.
+                # Serialize live delivery with the in-memory dialog baseline
+                # for attach replay, even when no browser/socket is connected.
                 with self.send_lock:
                     if isinstance(obj, dict):
                         self._on_event(obj)
@@ -711,7 +711,7 @@ class Wrap:
             pass
 
     def _on_event(self, obj):
-        self.waits.event(obj)
+        self.dialog_requests.event(obj)
         t = obj.get("type")
         if t == "response" and obj.get("id", "").startswith("init-"):
             self.init_resp = obj
@@ -806,7 +806,7 @@ class Wrap:
                     and obj.get("method") in DIALOG_METHODS):
                 continue
             yield raw
-        for request in self.waits.dialogs():
+        for request in self.dialog_requests.dialogs():
             yield (json.dumps(request, ensure_ascii=False) + "\n").encode("utf-8")
 
     def _conn_relay(self, conn):
