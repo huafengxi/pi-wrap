@@ -1,0 +1,22 @@
+{
+  "taskId": "6ggidb",
+  "platformRevision": "5919d933289d795ef4df7616659e7943e7f6f494",
+  "module": "pi-host",
+  "base": "main",
+  "files": [
+    ".gitignore",
+    "LOCAL-PROCESS.md",
+    "README.md",
+    "child_exec.py",
+    "generic_fakepi.py",
+    "host_io.py",
+    "local_process.py",
+    "pi_host.py",
+    "rpc_dialogs.py",
+    "test_generic.py",
+    "test_local_process.py",
+    "test_parent_exit.py",
+    "test_standalone.py",
+    "transport.py"
+  ]
+}

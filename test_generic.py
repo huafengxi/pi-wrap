@@ -13,6 +13,10 @@ import tempfile
 import time
 import unittest
 
+if not sys.platform.startswith('linux'):
+    print('SKIP Linux-only pidfd/orphan suite; portable RPC is in test_standalone.py')
+    sys.exit(0)
+
 P = Path(__file__).resolve().parent
 BASE = Path(tempfile.mkdtemp(prefix='h1-', dir='/tmp'))
 # Explicit harness ownership of orphans after intentional host SIGKILL.
@@ -87,8 +91,6 @@ class Case(unittest.TestCase):
                                     H1_AREA=str(self.area), H1_BURST='0'))
         self.env = dict(HOME=str(self.area/'home'), TMPDIR=str(self.area/'tmp'), PATH=os.defpath,
                         PYTHONDONTWRITEBYTECODE='1')
-        if 'AGENTD_DIR' in os.environ:
-            self.env['AGENTD_DIR'] = os.environ['AGENTD_DIR']
 
     def record(self, **obj):
         self.events.write(json.dumps(dict(at=time.time(), **obj))+'\n')
@@ -114,6 +116,11 @@ class Case(unittest.TestCase):
             return doc if doc['pid'] not in {d['pid'] for d in self.known} else None
         doc = until(fresh)
         self.known.append(doc)
+        # Standalone caller publishes accepted owner facts; P never writes JSON.
+        import local_process
+        parent = local_process.identity(doc['pid'])['ppid']
+        owner = {k: local_process.identity(parent)[k] for k in ('pid', 'start', 'boot')}
+        (self.area/'local/host.json').write_text(json.dumps(owner))
         return doc
 
     def connect(self):
@@ -228,18 +235,17 @@ class Case(unittest.TestCase):
         duplicate = self.start()
         self.assertEqual(duplicate.wait(timeout=6), 1)
         self.assertEqual(sock.stat().st_ino, inode)
-        # Same canonical session, even a different endpoint in the declared runtime dir.
-        cfg = dict(self.config, socketPath=str(sock.parent/'other'))
-        duplicate2 = self.start(cfg)
-        self.assertEqual(duplicate2.wait(timeout=6), 1)
-        self.assertFalse(Path(cfg['socketPath']).exists())
+        # Ordinary callers agree on ONE endpoint. Alternate basenames are not
+        # arbitrated; agent adapters retain their canonical-session file lock.
+        self.assertEqual(list(sock.parent.glob('*.lock')), [])
         self.assertIsNone(p.poll())
         self.assertEqual(self.command(conn)[-1]['data'], old)
         self.command(conn, 'exit')
         self.assertEqual(p.wait(timeout=6), 0)
         saved = self.session.read_bytes()
         again = self.start()
-        until(lambda: (self.area/'host3.log').stat().st_size > 0)
+        recovery_log = self.area / ('host%d.log' % (len(self.children) - 1))
+        until(lambda: recovery_log.stat().st_size > 0)
         new = self.ready()
         self.assertNotEqual(old['pid'], new['pid'])
         self.assertEqual(self.dialogs(self.command(self.connect())), [])
@@ -268,14 +274,9 @@ class Case(unittest.TestCase):
 
     def test_04_actual_shared_method_imports(self):
         import pi_host, transport
-        spec = importlib.util.spec_from_file_location('h1_agent', P/'pi-rpc-wrap.py')
-        wrapper = importlib.util.module_from_spec(spec); spec.loader.exec_module(wrapper)
         self.assertIs(pi_host.Host.__mro__[1], transport.Transport)
-        self.assertIs(wrapper.Wrap.__mro__[1], transport.Transport)
-        for name in ('pi_send', 'launch', '_read_stdout', 'accept_loop', 'replay_lines', '_conn_relay', 'setup_socket'):
-            self.assertIs(getattr(wrapper.Wrap, name), getattr(pi_host.Host, name), name)
-        self.record(imports=dict(transport=transport.__file__, proto=transport.proto.__file__,
-                                 DialogRequests=__import__('wait_state').__file__), shared='actual identical method objects')
+        self.record(imports=dict(transport=transport.__file__, host_io=transport.host_io.__file__,
+                                 DialogRequests=__import__('rpc_dialogs').__file__))
 
     def test_06_unknown_socket_and_config_refusal(self):
         bait = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

@@ -1,13 +1,11 @@
 """One PIPE owner and one replaceable local socket client; no agent lifecycle.
 
-The explicitly located, fixed agentd tool modules supply protocol identity and
-in-memory DialogRequests only. No agent registration, mailbox or scheduler runs.
+Self-contained standard-library mechanism. Callers supply launch configuration;
+agent policy, file locks, readiness markers and completion predicates live outside P.
 """
 import atexit
 from collections import deque
 from dataclasses import dataclass
-import fcntl
-import hashlib
 import json
 import os
 import socket
@@ -15,10 +13,9 @@ import stat
 import subprocess
 import threading
 
-from agentd_dependency import require_agentd
-require_agentd('proto', 'wait_state')
-import proto
-from wait_state import DialogRequests, DIALOG_METHODS
+import host_io
+import local_process
+from rpc_dialogs import DialogRequests, DIALOG_METHODS
 
 RING_MAX = 200
 STDERR_TAIL_MAX = 8192
@@ -73,29 +70,27 @@ class Transport:
         self.warned_oversize = self.warned_badjson = False
         self.srv = None
         self.dialog_requests = DialogRequests()
-        self._socket_locks = []
         self._socket_identity = None
         self._pump_threads = []
 
-    def setup_socket(self):
-        """Locks stay local beside the socket; never unlink a lock inode.
+    def process_starttime(self, pid):
+        return local_process.starttime(pid)
 
-        Both endpoint and canonical session key are locked, before examining or
-        unlinking stale endpoints. Unknown existing endpoints fail closed. The
-        local runtime directory is part of the stable session declaration.
+    def process_owner_alive(self, pid, expected_start):
+        return local_process.owner_alive(pid, expected_start)
+
+    def setup_socket(self):
+        """Bind one explicit endpoint, without cross-process file locks.
+
+        Existing owner/unknown endpoint checks are not atomic arbitration.
+        Callers validate the connected peer and native RPC after launch.
         """
         d = os.path.dirname(self.sock_path)
         os.makedirs(d, mode=0o700, exist_ok=True)
-        session = os.path.realpath(self.session_file)
-        session_key = hashlib.sha256(os.fsencode(session)).hexdigest()[:24]
         try:
-            for path in sorted({self.sock_path + '.lock', os.path.join(d, session_key + '.session.lock')}):
-                fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-                self._socket_locks.append(fd)
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            doc = proto.read_json(self.pid_file)
+            doc = self.read_socket_owner()
             if isinstance(doc, dict) and doc.get('pid'):
-                if proto.pid_identity_ok(doc['pid'], doc.get('procStart')):
+                if self.process_owner_alive(doc['pid'], doc.get('procStart')):
                     raise RuntimeError('live host owns socket; refusing second host')
             if os.path.lexists(self.sock_path):
                 if not isinstance(doc, dict) or not doc.get('pid'):
@@ -109,22 +104,26 @@ class Transport:
             self._socket_identity = (st.st_dev, st.st_ino)
             os.chmod(self.sock_path, 0o600)
             self.srv.listen(4)
-            proto.atomic_write_json(self.pid_file, {
-                'pid': os.getpid(), 'procStart': proto.proc_starttime(os.getpid()),
-                'startedAt': proto.now_ts(), **self.socket_metadata()})
+            self.publish_socket_owner({
+                'pid': os.getpid(), 'procStart': self.process_starttime(os.getpid()),
+                'startedAt': host_io.now_ts(), **self.socket_metadata()})
             atexit.register(self.cleanup_socket)
-        except BaseException as e:
-            # Preserve the agent adapter's precise bind diagnostic contract.
-            if isinstance(e, OSError) and not isinstance(e, BlockingIOError) and hasattr(self, 'diagnose'):
-                extra = 'bind 失败: %r' % e
-                if 'path too long' in str(e).lower():
-                    extra += '；端点路径超平台 sun_path 上限，需换更浅的 root'
-                self.diagnose('sock_bind_failed', 1, extra=extra)
+        except BaseException:
             Transport.cleanup_socket(self)
-            if isinstance(e, BlockingIOError):
-                raise RuntimeError('拒启双宿主: local session/socket lock is held') from e
             raise
         log('socket ready: %s', self.sock_path)
+
+    def read_socket_owner(self):
+        return host_io.read_owner(self.pid_file)
+
+    def publish_socket_owner(self, owner):
+        host_io.write_owner(self.pid_file, owner)
+
+    def remove_socket_owner(self):
+        try:
+            os.unlink(self.pid_file)
+        except FileNotFoundError:
+            pass
 
     def socket_metadata(self):
         return dict(sessionFile=os.path.realpath(self.session_file), sessionName=self.session_name)
@@ -141,34 +140,21 @@ class Transport:
     def cleanup_socket(self):
         if self.owns_socket():
             os.unlink(self.sock_path)
-            try:
-                os.unlink(self.pid_file)
-            except FileNotFoundError:
-                pass
+            self.remove_socket_owner()
         self._socket_identity = None
         if self.srv is not None:
             self.srv.close()
             self.srv = None
-        for fd in self._socket_locks:
-            os.close(fd)
-        self._socket_locks = []
+
+    def launch_argv(self, config):
+        return config.argv()
 
     def launch(self, config):
         if self.pi is not None:
             raise RuntimeError('one pi child per host invocation; explicit new host required')
-        # S owns the lease. Propagate its actual open descriptor to the entire
-        # cooperative foreground tree; never synthesize a lease or a generation.
-        lease = config.env.get('RUND_LEASE_FD')
-        pass_fds = ()
-        if lease is not None:
-            fd = int(lease)
-            if fd < 3:
-                raise ValueError('invalid RUND_LEASE_FD')
-            os.fstat(fd)
-            pass_fds = (fd,)
-        self.pi = subprocess.Popen(config.argv(), cwd=config.cwd, env=config.env,
+        self.pi = subprocess.Popen(self.launch_argv(config), cwd=config.cwd, env=config.env,
                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, pass_fds=pass_fds)
+                                   stderr=subprocess.PIPE)
         for name, target in [('stdout', self._read_stdout), ('stderr', self._read_stderr)]:
             t = threading.Thread(target=target, daemon=True, name='wrap-' + name)
             self._pump_threads.append(t)
@@ -260,16 +246,7 @@ class Transport:
 
 
     def _read_stderr(self):
-        """pi stderr 泵：**到达即写**（不等 EOF）。
-
-        硬要求 = 小额 stderr 在子进程**存活期**就落 `run/agentd/<name>.stderr.log`：
-        `BufferedReader.read(n)` 攒满 n ∨ EOF 才返回 ⇒ 注入层的装配摘要行与全部 fail-soft
-        WARN（都远小于 n）在活会话期恒不可见；而换代/kill 路径上读端（本进程）与写端（pi）
-        同死 ⇒ 卡在管道缓冲里的内容无人读、永久丢失。⇒ 任何依赖 EOF flush 的形态（等退出
-        再落盘 / 只调 flush 时机 / 加大缓冲）在那条路上恒失效，必须用 `read1(n)`（至多一次
-        底层 read，有数据即返回；EOF 仍回 b""）∨ 对 raw fd `os.read`。内存尾（stderr_tail /
-        STDERR_TAIL_MAX）与诊断尾同源，语义不变。
-        """
+        """Drain and flush available stderr immediately, without waiting for EOF."""
         try:
             with open(self.stderr_log, "ab") as lf:
                 while True:
