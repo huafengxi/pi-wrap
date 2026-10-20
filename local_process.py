@@ -12,6 +12,7 @@ from pathlib import Path
 import socket
 import struct
 import sys
+import uuid
 
 
 class BSDInfo(ctypes.Structure):
@@ -44,20 +45,28 @@ def boot_id():
         return Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     if sys.platform != 'darwin':
         raise RuntimeError('unsupported local process platform')
-    class Timeval(ctypes.Structure):
-        _fields_ = [('sec', ctypes.c_long), ('usec', ctypes.c_int)]
+    # kern.boottime is a wall-clock estimate and changes on clock correction.
+    # XNU exposes a stable UUID for this boot session; never fall back to time.
     libc = ctypes.CDLL(None, use_errno=True)
     fn = libc.sysctlbyname
     fn.argtypes = [ctypes.c_char_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t),
                    ctypes.c_void_p, ctypes.c_size_t]
     fn.restype = ctypes.c_int
-    value = Timeval()
-    size = ctypes.c_size_t(ctypes.sizeof(value))
-    if fn(b'kern.boottime', ctypes.byref(value), ctypes.byref(size), None, 0) != 0:
-        raise OSError(ctypes.get_errno(), 'kern.boottime')
-    if size.value != ctypes.sizeof(value) or value.sec <= 0:
-        raise RuntimeError('invalid kern.boottime')
-    return 'darwin:%d:%d' % (value.sec, value.usec)
+    value = ctypes.create_string_buffer(37)
+    size = ctypes.c_size_t(len(value))
+    if fn(b'kern.bootsessionuuid', value, ctypes.byref(size), None, 0) != 0:
+        raise OSError(ctypes.get_errno(), 'kern.bootsessionuuid')
+    if size.value != 37 or value.raw[-1:] != b'\0':
+        raise RuntimeError('invalid kern.bootsessionuuid size')
+    try:
+        token = value.raw[:-1].decode('ascii')
+        parsed = uuid.UUID(token)
+    except (ValueError, UnicodeDecodeError) as error:
+        raise RuntimeError('invalid kern.bootsessionuuid') from error
+    if str(parsed) != token.lower() or not parsed.int:
+        raise RuntimeError('invalid kern.bootsessionuuid')
+    return 'darwin:' + str(parsed)
+
 
 
 def _bsd_info(pid):
